@@ -1,103 +1,10 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-
-/* ═══════════════════ PURE JS QR CODE GENERATOR ═══════════════════ */
-const qrGen = (() => {
-  // GF(256) tables
-  const E = new Uint8Array(512), L = new Uint8Array(256);
-  let x = 1;
-  for (let i = 0; i < 255; i++) { E[i] = x; L[x] = i; x = (x << 1) ^ (x & 128 ? 285 : 0); }
-  for (let i = 255; i < 512; i++) E[i] = E[i - 255];
-  const gm = (a, b) => a && b ? E[L[a] + L[b]] : 0;
-
-  // Reed-Solomon
-  const rs = (d, n) => {
-    let g = [1];
-    for (let i = 0; i < n; i++) { let p = Array(g.length + 1).fill(0); for (let j = 0; j < g.length; j++) { p[j] ^= g[j]; p[j + 1] ^= gm(g[j], E[i]); } g = p; }
-    const o = new Uint8Array(d.length + n); o.set(d);
-    for (let i = 0; i < d.length; i++) if (o[i]) for (let j = 0; j < g.length; j++) o[i + j] ^= gm(g[j], o[i]);
-    return o.slice(d.length);
-  };
-
-  // Version table [total_cw, ec_per_block, num_blocks] — EC Level L
-  const VT = [, [26,7,1], [44,10,1], [70,15,1], [100,20,1], [134,26,1], [172,18,2], [196,20,2], [242,24,2], [292,30,2], [346,18,4]];
-  const AP = [, [], [6,18], [6,22], [6,26], [6,30], [6,34], [6,22,38], [6,24,42], [6,26,46], [6,28,50]];
-  // Format info bits for L EC, mask 0–7
-  const FM = [[1,1,1,0,1,1,1,1,1,0,0,0,1,0,0],[1,1,1,0,0,1,0,1,1,1,1,0,0,1,1],[1,1,1,1,1,0,1,1,0,1,0,1,0,1,0],[1,1,1,1,0,0,0,1,0,0,1,1,1,0,1],[1,1,0,0,1,1,0,0,0,1,0,1,1,1,1],[1,1,0,0,0,1,1,0,0,0,1,1,0,0,0],[1,1,0,1,1,0,0,0,1,0,0,0,0,0,1],[1,1,0,1,0,0,1,0,1,1,1,0,1,1,0]];
-
-  return (text) => {
-    const bytes = new TextEncoder().encode(text);
-    let ver = 0;
-    for (let i = 1; i <= 10; i++) { const dc = VT[i][0] - VT[i][1] * VT[i][2]; const cb = i < 10 ? 8 : 16; if (Math.ceil((4 + cb + bytes.length * 8) / 8) <= dc) { ver = i; break; } }
-    if (!ver) return null;
-
-    const sz = ver * 4 + 17, [tc, ec, nb] = VT[ver], dc = tc - ec * nb, cb = ver < 10 ? 8 : 16;
-    const bits = []; const pb = (v, n) => { for (let i = n - 1; i >= 0; i--) bits.push((v >> i) & 1); };
-    pb(4, 4); pb(bytes.length, cb); for (const b of bytes) pb(b, 8);
-    pb(0, Math.min(4, dc * 8 - bits.length)); while (bits.length % 8) bits.push(0);
-    const pd = [0xEC, 0x11]; let pi = 0; while (bits.length < dc * 8) { pb(pd[pi], 8); pi ^= 1; }
-    const dw = new Uint8Array(dc); for (let i = 0; i < dc; i++) { let v = 0; for (let j = 0; j < 8; j++) v = (v << 1) | (bits[i * 8 + j] || 0); dw[i] = v; }
-
-    const bsz = Math.floor(dc / nb), ex = dc % nb, db = [], eb = []; let off = 0;
-    for (let i = 0; i < nb; i++) { const s = bsz + (i >= nb - ex ? 1 : 0); db.push(dw.slice(off, off + s)); eb.push(rs(dw.slice(off, off + s), ec)); off += s; }
-    const fin = [];
-    for (let i = 0; i < bsz + (ex ? 1 : 0); i++) for (const k of db) if (i < k.length) fin.push(k[i]);
-    for (let i = 0; i < ec; i++) for (const k of eb) fin.push(k[i]);
-
-    const MK = () => Array.from({ length: sz }, () => new Uint8Array(sz));
-    const m = MK(), R = MK();
-
-    // Finders
-    const sf = (r, c) => { for (let dr = -1; dr <= 7; dr++) for (let dc2 = -1; dc2 <= 7; dc2++) { const rr = r + dr, cc = c + dc2; if (rr < 0 || rr >= sz || cc < 0 || cc >= sz) continue; R[rr][cc] = 1; if (dr >= 0 && dr <= 6 && dc2 >= 0 && dc2 <= 6) m[rr][cc] = (dr === 0 || dr === 6 || dc2 === 0 || dc2 === 6 || (dr >= 2 && dr <= 4 && dc2 >= 2 && dc2 <= 4)) ? 1 : 0; } };
-    sf(0, 0); sf(0, sz - 7); sf(sz - 7, 0);
-
-    // Timing
-    for (let i = 8; i < sz - 8; i++) { R[6][i] = R[i][6] = 1; m[6][i] = m[i][6] = (i % 2 === 0) ? 1 : 0; }
-
-    // Alignment
-    const ap = AP[ver];
-    if (ap.length > 1) for (const r of ap) for (const c of ap) { if (R[r][c]) continue; for (let dr = -2; dr <= 2; dr++) for (let dc2 = -2; dc2 <= 2; dc2++) { R[r + dr][c + dc2] = 1; m[r + dr][c + dc2] = (Math.abs(dr) === 2 || Math.abs(dc2) === 2 || (dr === 0 && dc2 === 0)) ? 1 : 0; } }
-
-    // Format reserve + dark module
-    for (let i = 0; i < 8; i++) { R[8][i] = R[8][sz - 1 - i] = R[i][8] = R[sz - 1 - i][8] = 1; }
-    R[8][8] = 1; m[sz - 8][8] = 1; R[sz - 8][8] = 1;
-
-    // Version info reserve (v>=7)
-    if (ver >= 7) for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) { R[i][sz - 11 + j] = R[sz - 11 + j][i] = 1; }
-
-    // Place data
-    const fb = []; for (const v of fin) for (let i = 7; i >= 0; i--) fb.push((v >> i) & 1);
-    let bi = 0, up = true;
-    for (let col = sz - 1; col >= 0; col -= 2) {
-      if (col === 6) col = 5;
-      const rows = up ? [...Array(sz)].map((_, i) => sz - 1 - i) : [...Array(sz)].map((_, i) => i);
-      for (const row of rows) for (let d = 0; d <= 1; d++) { const c = col - d; if (c < 0 || R[row][c]) continue; m[row][c] = bi < fb.length ? fb[bi++] : 0; }
-      up = !up;
-    }
-
-    // Masking
-    const MF = [(r, c) => (r + c) % 2 === 0, (r) => r % 2 === 0, (r, c) => c % 3 === 0, (r, c) => (r + c) % 3 === 0, (r, c) => (~~(r / 2) + ~~(c / 3)) % 2 === 0, (r, c) => r * c % 2 + r * c % 3 === 0, (r, c) => (r * c % 2 + r * c % 3) % 2 === 0, (r, c) => ((r + c) % 2 + r * c % 3) % 2 === 0];
-    const apply = (mi) => {
-      const cp = m.map(r => r.slice()), fn = MF[mi];
-      for (let r = 0; r < sz; r++) for (let c = 0; c < sz; c++) if (!R[r][c] && fn(r, c)) cp[r][c] ^= 1;
-      const f = FM[mi];
-      [[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],[7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]].forEach(([r,c],i) => cp[r][c] = f[i]);
-      [[sz-1,8],[sz-2,8],[sz-3,8],[sz-4,8],[sz-5,8],[sz-6,8],[sz-7,8],[8,sz-8],[8,sz-7],[8,sz-6],[8,sz-5],[8,sz-4],[8,sz-3],[8,sz-2],[8,sz-1]].forEach(([r,c],i) => cp[r][c] = f[i]);
-      return cp;
-    };
-
-    let best = 0, bestS = 1e9;
-    for (let i = 0; i < 8; i++) {
-      const c = apply(i); let s = 0;
-      for (let r = 0; r < sz; r++) { let run = 1; for (let j = 1; j < sz; j++) { if (c[r][j] === c[r][j - 1]) run++; else { if (run >= 5) s += run - 2; run = 1; } } if (run >= 5) s += run - 2; }
-      for (let j = 0; j < sz; j++) { let run = 1; for (let r = 1; r < sz; r++) { if (c[r][j] === c[r - 1][j]) run++; else { if (run >= 5) s += run - 2; run = 1; } } if (run >= 5) s += run - 2; }
-      if (s < bestS) { bestS = s; best = i; }
-    }
-    return apply(best);
-  };
-})();
+import QRCode from "qrcode";
+import { toPng } from "html-to-image";
+import { jsPDF } from "jspdf";
 
 /* ═══════════════════ CONSTANTS ═══════════════════ */
-const TAG_TYPES = ["SWI", "IC", "PC", "LC", "AQE"];
+const TAG_TYPES = ["SWI", "IC", "LC", "AQE"];
 const TAG_COLORS = {
   SWI: { bg: "#FFEBEE", color: "#C62828", border: "#EF9A9A" },
   IC:  { bg: "#FFF3E0", color: "#E65100", border: "#FFCC80" },
@@ -112,14 +19,20 @@ let _id = 100; const uid = () => `_${_id++}`;
 
 /* ═══════════════════ QR SVG COMPONENT ═══════════════════ */
 const QRCodeSVG = ({ url, size, bgColor }) => {
-  const matrix = useMemo(() => { try { return qrGen(url); } catch { return null; } }, [url]);
-  if (!matrix) return null;
-  const n = matrix.length;
-  const cell = size / (n + 2);
+  const modules = useMemo(() => {
+    try { return QRCode.create(url, { errorCorrectionLevel: "L" }).modules; }
+    catch { return null; }
+  }, [url]);
+  if (!modules) return null;
+  const n = modules.size, cell = size / (n + 2);
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ display: "block", borderRadius: 2 }}>
       <rect x="0" y="0" width={size} height={size} fill={bgColor} rx="2" />
-      {matrix.map((row, r) => row.map((v, c) => v ? <rect key={`${r}_${c}`} x={(c+1)*cell} y={(r+1)*cell} width={cell+0.5} height={cell+0.5} fill="#000000" /> : null))}
+      {Array.from({ length: n }, (_, r) =>
+        Array.from({ length: n }, (_, c) =>
+          modules.get(r, c) ? <rect key={`${r}_${c}`} x={(c+1)*cell} y={(r+1)*cell} width={cell+0.5} height={cell+0.5} fill="#000" /> : null
+        )
+      )}
     </svg>
   );
 };
@@ -181,6 +94,10 @@ const BookendEditor = ({ data, onChange }) => {
   const up = (fn) => { const d = JSON.parse(JSON.stringify(data)); fn(d); onChange(d); };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+      <div style={{ marginBottom:6 }}>
+        <label style={{ fontSize:11,fontWeight:600,color:"#666",display:"block",marginBottom:4 }}>Tags du panneau</label>
+        <TagEditor tags={data.tags || []} onChange={tags=>up(d=>{d.tags=tags;})} />
+      </div>
       {data.sections.map(sec => (
         <SectionCard key={sec.id} title={sec.title} actions={<Btn small outline color="#999" onClick={()=>up(d=>{d.sections=d.sections.filter(x=>x.id!==sec.id);})}>✕</Btn>}>
           <Input value={sec.title} onChange={v=>up(d=>{d.sections.find(x=>x.id===sec.id).title=v;})} style={{ marginBottom:6,fontWeight:600 }} />
@@ -213,19 +130,26 @@ const StepsEditor = ({ steps, onChange }) => {
           <Btn small outline color="#d32f2f" onClick={()=>up(d=>{const i=d.findIndex(x=>x.id===step.id);d.splice(i,1);})}>✕</Btn>
         </>}>
           <Input value={step.title} onChange={v=>up(d=>{d.find(x=>x.id===step.id).title=v;})} style={{ marginBottom:6,fontWeight:600 }} />
-          {step.operations.map(op => (
-            <div key={op.id} style={{ background:"#fafafa",borderRadius:5,padding:"6px 8px",marginBottom:4,border:"1px solid #eee" }}>
+          <div style={{ marginBottom:6 }}>
+            <label style={{ fontSize:11,fontWeight:600,color:"#666",display:"block",marginBottom:4 }}>Tags du process</label>
+            <TagEditor tags={step.tags || []} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).tags=tags;})} />
+          </div>
+          {step.operations.map((op, opi) => (
+            <div key={op.id} style={{ background: op.isControlPoint ? "#E3F2FD" : "#fafafa", borderRadius: 5, padding: "6px 8px", marginBottom: 4, border: op.isControlPoint ? "1.5px solid #90CAF9" : "1px solid #eee" }}>
               <div style={{ display:"flex",gap:4,alignItems:"center" }}>
-                <Input value={op.name} onChange={v=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).name=v;})} style={{ flex:1 }} />
+                <Input value={op.name} onChange={v=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).name=v;})} style={{ flex:1,fontSize:12 }} />
+                <Btn small outline color="#888" onClick={()=>up(d=>{const s=d.find(x=>x.id===step.id);if(opi>0)[s.operations[opi-1],s.operations[opi]]=[s.operations[opi],s.operations[opi-1]];})}>↑</Btn>
+                <Btn small outline color="#888" onClick={()=>up(d=>{const s=d.find(x=>x.id===step.id);if(opi<s.operations.length-1)[s.operations[opi],s.operations[opi+1]]=[s.operations[opi+1],s.operations[opi]];})}>↓</Btn>
                 <span onClick={()=>up(d=>{const s=d.find(x=>x.id===step.id);s.operations=s.operations.filter(o=>o.id!==op.id);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc" }}>✕</span>
               </div>
-              <TagEditor tags={op.tags} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).tags=tags;})} />
+              {!op.isControlPoint && <TagEditor tags={op.tags} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).tags=tags;})} />}
             </div>
           ))}
           <Btn small outline color="#888" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),name:"Opération",tags:[]});})}>+ Opération</Btn>
+          <Btn small outline color="#1565C0" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),isControlPoint:true,name:"Point de contrôle"});})}>+ PC</Btn>
         </SectionCard>
       ))}
-      <Btn onClick={()=>up(d=>d.push({id:uid(),title:"Nouvelle étape",operations:[]}))} style={{ alignSelf:"flex-start" }}>+ Étape process</Btn>
+      <Btn onClick={()=>up(d=>d.push({id:uid(),title:"Nouvelle étape",tags:[],operations:[]}))} style={{ alignSelf:"flex-start" }}>+ Étape process</Btn>
     </div>
   );
 };
@@ -233,17 +157,20 @@ const StepsEditor = ({ steps, onChange }) => {
 /* ═══════════════════ BOOKEND PANEL (Preview) ═══════════════════ */
 const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
   const isE = type === "entree";
-  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"flex-start" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
+  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
   return (
     <div style={{ width:width||"fit-content",borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",flexShrink:0 }}>
-      <div style={{ padding:`${8*s}px ${12*s}px`,color:"#fff",fontSize:12*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,background:isE?"#2E7D32":"#9B0D23",whiteSpace:"nowrap" }}>{isE?"▶ Entrée":"Sortie ▶"}</div>
+      <div style={{ padding:`${8*s}px ${12*s}px`,color:"#fff",fontSize:12*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,background:isE?"#2E7D32":"#9B0D23",display:"flex",flexDirection:"column",gap:4*s,lineHeight:1.2 }}>
+        <div>{isE?"▶ Entrée":"Sortie ▶"}</div>
+        {(bookendData.tags || []).length > 0 && renderTags(bookendData.tags || [])}
+      </div>
       <div style={{ flex:1,padding:8*s,display:"flex",flexDirection:"column",gap:6*s,background:isE?"#E8F5E9":"#FFEBEE",border:`1.5px solid ${isE?"#A5D6A7":"#EF9A9A"}`,borderTop:"none",borderRadius:"0 0 8px 8px" }}>
         {bookendData.sections.map(sec => (
           <div key={sec.id}>
-            <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#757575",borderBottom:"1px solid rgba(0,0,0,0.08)",paddingBottom:2*s,marginBottom:4*s,whiteSpace:"nowrap" }}>{sec.title}</div>
+            <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#757575",borderBottom:"1px solid rgba(0,0,0,0.08)",paddingBottom:2*s,marginBottom:4*s,lineHeight:1.2 }}>{sec.title}</div>
             {sec.items.map(item => (
               <div key={item.id} style={{ background:"rgba(255,255,255,0.7)",borderRadius:4,padding:`${5*s}px ${7*s}px`,marginBottom:3*s }}>
-                <div style={{ fontSize:10*s,fontWeight:500,color:"#424242",marginBottom:2*s,whiteSpace:"nowrap" }}>{item.name}</div>
+                <div style={{ fontSize:10*s,fontWeight:500,color:"#424242",marginBottom:2*s,lineHeight:1.2 }}>{item.name}</div>
                 {renderTags(item.tags)}
               </div>
             ))}
@@ -264,32 +191,42 @@ const PosterPreview = ({ data }) => {
   const maxCols = data.maxCols > 0 ? data.maxCols : Math.min(totalSteps, isPortrait ? 3 : 4);
   const rows = []; for (let i = 0; i < totalSteps; i += maxCols) rows.push(data.steps.slice(i, i + maxCols));
 
-  // Dynamic bookend width
-  const eRef = useRef(null), sRef = useRef(null);
-  const [bkW, setBkW] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const eW = eRef.current?.offsetWidth || 0, sW = sRef.current?.offsetWidth || 0;
-      const w = Math.max(eW, sW); if (w > 0 && w !== bkW) setBkW(w);
-    }, 50);
-    return () => clearTimeout(t);
-  });
+  const bookendW = data.bookendWidth || 220;
 
-  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"flex-start" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
+  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
+  const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><Tag key={t.id} type={t.type} small scale={s} />)}</div>;
 
   const renderStep = (step, si) => (
     <div key={step.id} style={{ flex:"1 1 0%",minWidth:0,borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",border:"1.5px solid #e0e0e0" }}>
       <div style={{ display:"flex",alignItems:"center",gap:8*s,padding:`${7*s}px ${12*s}px`,background:"#212121",color:"#fff" }}>
         <div style={{ fontFamily:"monospace",fontSize:14*s,fontWeight:700,background:"#E87722",color:"#fff",width:22*s,height:22*s,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{si+1}</div>
-        <div style={{ fontSize:11*s,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{step.title}</div>
+        <div style={{ flex:1,display:"flex",alignItems:"center",gap:4*s,minWidth:0 }}>
+          <div style={{ fontSize:11*s,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{step.title}</div>
+          {(step.tags || []).length > 0 && renderTags(step.tags || [])}
+        </div>
       </div>
       <div style={{ flex:1,padding:8*s,display:"flex",flexDirection:"column",gap:5*s,background:"#fff" }}>
-        {step.operations.map(op => (
-          <div key={op.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"column",gap:3*s }}>
-            <div style={{ fontSize:10*s,fontWeight:600,color:"#424242" }}>{op.name}</div>
-            {renderTags(op.tags)}
-          </div>
-        ))}
+        {step.operations.map((item, idx) => {
+          if (item.isControlPoint) {
+            return (
+              <div key={item.id} style={{ display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${6*s}px ${12*s}px`,fontSize:12*s,fontWeight:700,color:"#1565C0",background:"#E3F2FD",border:"2px solid #90CAF9",textTransform:"uppercase",letterSpacing:1 }}>
+                {item.name}
+              </div>
+            );
+          } else {
+            const operLetterIndex = step.operations.slice(0, idx).filter(o => !o.isControlPoint).length;
+            const operationLetter = String.fromCharCode(65 + operLetterIndex);
+            return (
+              <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"column",gap:3*s }}>
+                <div style={{ display:"flex",alignItems:"center",gap:6*s }}>
+                  <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:"2.5px solid #000",background:"#fafafa",color:"#000",minWidth:24*s,height:24*s,flexShrink:0 }}>{operationLetter}</span>
+                  <div style={{ fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
+                </div>
+                {renderTagsPlain(item.tags)}
+              </div>
+            );
+          }
+        })}
       </div>
     </div>
   );
@@ -303,7 +240,6 @@ const PosterPreview = ({ data }) => {
 
   const rowConn = <div style={{ display:"flex",alignItems:"center",justifyContent:"center",padding:`${2*s}px 0`,color:"#ccc" }}><svg width={18*s} height={18*s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 16.59L6.41 11 5 12.41 12 19.41 19 12.41 17.59 11z"/></svg></div>;
   const arrowSt = { display:"flex",alignItems:"center",justifyContent:"center",width:20*s,minWidth:20*s,color:"#bbb",fontSize:18*s,flexShrink:0 };
-  const syncW = bkW > 0 ? bkW : undefined;
 
   const forceH = data.forceFormat;
 
@@ -311,19 +247,14 @@ const PosterPreview = ({ data }) => {
     <div data-poster-root="1" style={{ width:posterW, ...(forceH ? {height:posterH} : {minHeight:posterH}), fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",background:"#fff",borderRadius:6,overflow:forceH?"hidden":"visible",boxShadow:"0 2px 16px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column", position:"relative", ...(forceH ? {outline:"2px dashed #C8102E",outlineOffset:-2} : {}) }}>
       {/* Format lock indicator */}
       {forceH && <div style={{ position:"absolute",top:4,right:4,background:"#C8102E",color:"#fff",fontSize:8*s,padding:`${1*s}px ${4*s}px`,borderRadius:3,fontWeight:700,opacity:0.7,zIndex:10 }}>FORMAT FIXE</div>}
-      {/* Hidden measurement */}
-      <div style={{ position:"absolute",visibility:"hidden",pointerEvents:"none",zIndex:-1 }}>
-        <div ref={eRef} style={{ display:"inline-block" }}><BookendPanel bookendData={data.entree} type="entree" s={s} qrSize={qrSize} /></div>
-        <div ref={sRef} style={{ display:"inline-block" }}><BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} /></div>
-      </div>
 
       {/* Header */}
-      <div style={{ background:"#C8102E",color:"#fff",display:"flex",alignItems:"center",padding:`0 ${24*s}px`,height:56*s,gap:20*s,flexShrink:0 }}>
-        <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*s,lineHeight:1.1 }}>
+      <div style={{ background:"#C8102E",color:"#fff",display:"flex",alignItems:"flex-start",padding:`0 ${24*s}px`,height:56*s,gap:20*s,flexShrink:0,paddingTop:4*s }}>
+        <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*s,display:"flex",flexDirection:"column",gap:2*s }}>
           <span style={{ fontSize:8*s,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Référence</span>
-          <strong style={{ fontFamily:"monospace",fontSize:24*s,fontWeight:700,display:"block" }}>{data.header.reference}</strong>
+          <strong style={{ fontFamily:"monospace",fontSize:24*s,fontWeight:700 }}>{data.header.reference}</strong>
         </div>
-        <div style={{ flex:1 }}>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",gap:2*s }}>
           <span style={{ fontSize:8*s,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Process</span>
           <div style={{ fontSize:16*s,fontWeight:700 }}>{data.header.processName}</div>
           <div style={{ fontSize:10*s,opacity:0.85 }}>{data.header.subtitle}</div>
@@ -341,21 +272,21 @@ const PosterPreview = ({ data }) => {
 
       {/* Main */}
       <div style={{ display:"flex",padding:`${14*s}px ${16*s}px`,gap:10*s,alignItems:"stretch",flex:1 }}>
-        <BookendPanel bookendData={data.entree} type="entree" s={s} qrSize={qrSize} width={syncW} />
+        <BookendPanel bookendData={data.entree} type="entree" s={s} qrSize={qrSize} width={bookendW} />
         <div style={arrowSt}>›</div>
         <div style={{ flex:1,display:"flex",flexDirection:"column",gap:0,minWidth:0 }}>
           {rows.map((rowSteps, ri) => <div key={ri}>{ri > 0 && rowConn}{renderRow(rowSteps, ri)}</div>)}
         </div>
         <div style={arrowSt}>›</div>
-        <BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} width={syncW} />
+        <BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} width={bookendW} />
       </div>
 
       {/* Background image — propre bloc, sans déformation */}
-      {data.backgroundImage && (
-        <div style={{ flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"center",background:"#f0f0f0",maxHeight:posterH*0.25,overflow:"hidden" }}>
-          <img src={data.backgroundImage} alt="" style={{ maxWidth:"100%",maxHeight:posterH*0.25,objectFit:"contain",display:"block" }} />
+      {data.backgroundImage && (()=>{const bh=posterH*((data.bgImageHeight||25)/100);return(
+        <div style={{ flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"center",background:"#f0f0f0",height:bh,overflow:"hidden" }}>
+          <img src={data.backgroundImage} alt="" style={{ maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block" }} />
         </div>
-      )}
+      );})()}
 
       {/* Footer */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:"#212121",color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
@@ -370,42 +301,44 @@ const PosterPreview = ({ data }) => {
 /* ═══════════════════ DEFAULT DATA ═══════════════════ */
 const defaultData = () => ({
   header: { reference: "37019", processName: "Extrusion mono-couche", subtitle: "Fil isolé coloré", logoDataUrl: null },
-  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false,
-  entree: { sections: [
+  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false, bookendWidth: 220, bgImageHeight: 25, pdfResolution: 3,
+  entree: { tags: [], sections: [
     { id: uid(), title: "Matière", items: [
       { id: uid(), name: "Fil de cuivre", tags: [{ id: uid(), type: "IC", url: "https://nexans.com/ic-cuivre" }, { id: uid(), type: "PC", url: "" }] },
       { id: uid(), name: "HDPE", tags: [{ id: uid(), type: "IC", url: "" }] },
       { id: uid(), name: "Colorants", tags: [{ id: uid(), type: "IC", url: "" }] },
     ]},
     { id: uid(), title: "Informations", items: [
-      { id: uid(), name: "OF / Planning", tags: [{ id: uid(), type: "PC", url: "" }] },
+      { id: uid(), name: "OF / Planning", tags: [{ id: uid(), type: "SWI", url: "" }] },
       { id: uid(), name: "Recette", tags: [{ id: uid(), type: "SWI", url: "https://nexans.com/swi-recette" }, { id: uid(), type: "IC", url: "" }] },
     ]},
   ]},
   steps: [
-    { id: uid(), title: "Fil de cuivre nu", operations: [
-      { id: uid(), name: "Dévidoir", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
+    { id: uid(), title: "Fil de cuivre nu", tags: [], operations: [
+      { id: uid(), name: "Dévidoir", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
       { id: uid(), name: "Soudure", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
       { id: uid(), name: "Redressage", tags: [{ id: uid(), type: "SWI", url: "" }] },
       { id: uid(), name: "Préchauffeur", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
     ]},
-    { id: uid(), title: "Extrusion", operations: [
-      { id: uid(), name: "Alim. HDPE", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
+    { id: uid(), title: "Extrusion", tags: [{ id: uid(), type: "SWI", url: "https://nexans.com/swi-extrusion" }, { id: uid(), type: "IC", url: "" }], operations: [
+      { id: uid(), name: "Alim. HDPE", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
       { id: uid(), name: "Alim. colorant", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Dosage", tags: [{ id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
+      { id: uid(), isControlPoint: true, name: "Point de contrôle" },
+      { id: uid(), name: "Dosage", tags: [{ id: uid(), type: "IC", url: "" }] },
     ]},
-    { id: uid(), title: "Refroidissement", operations: [
-      { id: uid(), name: "Contrôle qualité", tags: [{ id: uid(), type: "AQE", url: "" }, { id: uid(), type: "PC", url: "" }] },
+    { id: uid(), title: "Refroidissement", tags: [], operations: [
+      { id: uid(), name: "Contrôle qualité", tags: [{ id: uid(), type: "AQE", url: "" }] },
+      { id: uid(), isControlPoint: true, name: "Vérification" },
       { id: uid(), name: "Liste de contrôle", tags: [{ id: uid(), type: "LC", url: "" }] },
     ]},
   ],
-  sortie: { sections: [
+  sortie: { tags: [], sections: [
     { id: uid(), title: "Matière", items: [
-      { id: uid(), name: "Fil isolé", tags: [{ id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
-      { id: uid(), name: "Fil coloré", tags: [{ id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
+      { id: uid(), name: "Fil isolé", tags: [{ id: uid(), type: "IC", url: "" }] },
+      { id: uid(), name: "Fil coloré", tags: [{ id: uid(), type: "IC", url: "" }] },
     ]},
     { id: uid(), title: "Informations", items: [
-      { id: uid(), name: "SAP / MES", tags: [{ id: uid(), type: "PC", url: "" }] },
+      { id: uid(), name: "SAP / MES", tags: [{ id: uid(), type: "LC", url: "" }] },
       { id: uid(), name: "Checklist", tags: [{ id: uid(), type: "LC", url: "" }] },
       { id: uid(), name: "Carte bobine", tags: [{ id: uid(), type: "IC", url: "" }] },
     ]},
@@ -430,17 +363,27 @@ export default function App() {
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
     const w = el.offsetWidth, h = el.offsetHeight;
-    const html = el.outerHTML;
+    const xhtml = new XMLSerializer().serializeToString(el);
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
 <foreignObject width="${w}" height="${h}">
 <div xmlns="http://www.w3.org/1999/xhtml">
 <style>*{margin:0;padding:0;box-sizing:border-box}</style>
-${html}
+${xhtml}
 </div>
 </foreignObject>
 </svg>`;
     const blob = new Blob([svg], { type: "image/svg+xml" });
     const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `affiche_${data.header.reference}.svg`; a.click(); URL.revokeObjectURL(u);
+  };
+  const exportPDF = async () => {
+    const el = document.querySelector("[data-poster-root]");
+    if (!el) return;
+    const fmt = FORMATS[data.format] || { w: data.customW, h: data.customH };
+    const dataUrl = await toPng(el, { pixelRatio: data.pdfResolution || 3 });
+    const orientation = fmt.w > fmt.h ? "landscape" : "portrait";
+    const doc = new jsPDF({ orientation, unit: "mm", format: [fmt.w, fmt.h] });
+    doc.addImage(dataUrl, "PNG", 0, 0, fmt.w, fmt.h);
+    doc.save(`affiche_${data.header.reference}.pdf`);
   };
   const importJSON = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { setData(JSON.parse(ev.target.result)); } catch { alert("JSON invalide"); } }; r.readAsText(f); };
   const handleImg = (ref, key) => () => { const f = ref.current?.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => up(d => { if (key === "logo") d.header.logoDataUrl = ev.target.result; else d.backgroundImage = ev.target.result; }); r.readAsDataURL(f); };
@@ -470,6 +413,13 @@ ${html}
                 <div style={{ fontSize:10,color:"#999" }}>S'affiche entre le contenu et le footer, sans déformation.</div>
                 <input ref={bgRef} type="file" accept="image/*" onChange={handleImg(bgRef,"bg")} style={{ fontSize:11 }} />
                 {data.backgroundImage && <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.backgroundImage=null;})}>Supprimer</Btn>}
+                {data.backgroundImage && (
+                  <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
+                    <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Hauteur image bandeau</label>
+                    <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>5%</span><input type="range" min="5" max="60" step="1" value={data.bgImageHeight||25} onChange={e=>up(d=>{d.bgImageHeight=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>60%</span></div>
+                    <div style={{ fontSize:12,fontWeight:700,color:"#C8102E",marginTop:4 }}>{data.bgImageHeight||25}%</div>
+                  </div>
+                )}
               </div>
             )}
             {tab === "format" && (
@@ -508,6 +458,12 @@ ${html}
                   <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontSize:10,color:"#888" }}>16</span><input type="range" min="16" max="80" step="4" value={data.qrSize} onChange={e=>up(d=>{d.qrSize=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>80</span></div>
                   <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.qrSize}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round(data.qrSize*data.fontScale)}px</span></div>
                 </div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Largeur entrée / sortie</label>
+                  <div style={{ fontSize:10,color:"#999",marginBottom:4 }}>Contrôle la largeur fixe des panneaux entrée et sortie.</div>
+                  <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontSize:10,color:"#888" }}>10</span><input type="range" min="10" max="420" step="10" value={data.bookendWidth || 220} onChange={e=>up(d=>{d.bookendWidth=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>420</span></div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.bookendWidth || 220}px</span></div>
+                </div>
               </div>
             )}
             {tab === "entree" && <BookendEditor data={data.entree} onChange={entree=>up(d=>{d.entree=entree;})} />}
@@ -515,10 +471,17 @@ ${html}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel, ouvrable dans Illustrator / Inkscape<br/>• <strong>PDF</strong> — Via impression navigateur (Ctrl+P)</div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel, ouvrable dans Illustrator / Inkscape (QR codes inclus en natif)<br/>• <strong>PDF</strong> — Téléchargement direct</div>
                 <Btn onClick={exportJSON}>↓ Exporter JSON</Btn>
                 <Btn onClick={exportSVG} color="#E87722">↓ Exporter SVG</Btn>
-                <Btn onClick={()=>window.print()} color="#1565C0">⎙ Imprimer / PDF</Btn>
+                <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Résolution PDF</label>
+                  <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginTop:6 }}>
+                    {[{v:1,l:"1× (96 DPI)"},{v:2,l:"2× (200 DPI)"},{v:3,l:"3× (300 DPI)"},{v:4,l:"4× (400 DPI)"}].map(r=><button key={r.v} onClick={()=>up(d=>{d.pdfResolution=r.v;})} style={{ padding:"5px 10px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:(data.pdfResolution||3)===r.v?"2px solid #1565C0":"1.5px solid #ddd",background:(data.pdfResolution||3)===r.v?"#E3F2FD":"#fff",color:(data.pdfResolution||3)===r.v?"#1565C0":"#666" }}>{r.l}</button>)}
+                  </div>
+                  <div style={{ fontSize:10,color:"#999",marginTop:4 }}>Plus élevé = meilleure qualité, mais plus lent et plus lourd (attention aux grands formats).</div>
+                </div>
+                <Btn onClick={exportPDF} color="#1565C0">↓ Exporter PDF</Btn>
                 <div style={{ borderTop:"1px solid #e0e0e0",paddingTop:12 }}><label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Importer JSON</label><input ref={fileRef} type="file" accept=".json" onChange={importJSON} style={{ fontSize:11,marginTop:4 }} /></div>
                 <Btn outline color="#d32f2f" onClick={()=>{if(confirm("Réinitialiser ?"))setData(defaultData());}}>↺ Réinitialiser</Btn>
               </div>
