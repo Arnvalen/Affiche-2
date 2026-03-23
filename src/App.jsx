@@ -1,10 +1,28 @@
+/**
+ * Application complète de l'éditeur d'affiches Nexans.
+ *
+ * Ce fichier unique contient tous les composants :
+ * - Constantes (types de tags, formats papier, couleurs)
+ * - Composants de rendu (QR codes, tags, panneaux, poster)
+ * - Composants d'édition (tags, entrée/sortie, étapes)
+ * - Primitives UI (boutons, inputs, cartes dépliables)
+ * - Fonctions d'export (JSON, SVG, PDF)
+ * - Composant principal App (state, sidebar, layout)
+ *
+ * Tous les styles sont inline (objets React) pour simplifier les exports
+ * SVG/PDF qui capturent le DOM directement.
+ */
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import QRCode from "qrcode";
-import { toPng } from "html-to-image";
-import { jsPDF } from "jspdf";
+import QRCode from "qrcode";            // Génération de la matrice QR
+import { toPng } from "html-to-image";  // Capture DOM → PNG via rendu navigateur natif
+import { jsPDF } from "jspdf";          // Création de fichiers PDF
 
 /* ═══════════════════ CONSTANTS ═══════════════════ */
+
+/** Types de tags disponibles dans l'éditeur */
 const TAG_TYPES = ["SWI", "IC", "LC", "AQE"];
+
+/** Couleurs associées à chaque type de tag (fond, texte, bordure) */
 const TAG_COLORS = {
   SWI: { bg: "#FFEBEE", color: "#C62828", border: "#EF9A9A" },
   IC:  { bg: "#FFF3E0", color: "#E65100", border: "#FFCC80" },
@@ -12,12 +30,31 @@ const TAG_COLORS = {
   LC:  { bg: "#E8F5E9", color: "#2E7D32", border: "#A5D6A7" },
   AQE: { bg: "#F3E5F5", color: "#6A1B9A", border: "#CE93D8" },
 };
+
+/** Libellés complets des types de tags (affichés dans la légende) */
 const TAG_LABELS = { SWI: "Standard Work Instruction", IC: "Instruction de contrôle", PC: "Point de contrôle", LC: "Liste de contrôle", AQE: "Appareil qualité embarqué" };
+
+/** Formats papier standards (dimensions en mm). Clé "Personnalisé" = valeurs par défaut modifiables. */
 const FORMATS = { "A0-paysage":{w:1189,h:841},"A1-paysage":{w:841,h:594},"A2-paysage":{w:594,h:420},"A3-paysage":{w:420,h:297},"A4-paysage":{w:297,h:210},"A0-portrait":{w:841,h:1189},"A1-portrait":{w:594,h:841},"A2-portrait":{w:420,h:594},"A3-portrait":{w:297,h:420},"A4-portrait":{w:210,h:297},"Personnalisé":{w:800,h:500} };
+
+/** Facteur de conversion millimètres → pixels pour le rendu écran (arbitraire, pas un DPI standard) */
 const MM_PX = 1.4;
+
+/** Générateur d'IDs uniques pour les éléments du modèle de données */
 let _id = 100; const uid = () => `_${_id++}`;
 
 /* ═══════════════════ QR SVG COMPONENT ═══════════════════ */
+
+/**
+ * Rendu SVG natif d'un QR code à partir d'une URL.
+ * Utilise la lib `qrcode` pour générer la matrice de modules,
+ * puis dessine chaque module comme un <rect> SVG.
+ * Avantage : vectoriel pur, pas de raster → qualité parfaite en export SVG/PDF.
+ *
+ * @param {string} url - L'URL encodée dans le QR
+ * @param {number} size - Taille du QR en pixels (avant scaling)
+ * @param {string} bgColor - Couleur de fond (correspond à la couleur du tag parent)
+ */
 const QRCodeSVG = ({ url, size, bgColor }) => {
   const modules = useMemo(() => {
     try { return QRCode.create(url, { errorCorrectionLevel: "L" }).modules; }
@@ -38,11 +75,14 @@ const QRCodeSVG = ({ url, size, bgColor }) => {
 };
 
 /* ═══════════════════ TAG COMPONENTS ═══════════════════ */
+
+/** Pastille de tag simple (SWI, IC, LC, AQE) avec couleur associée. Utilisé dans la légende et les opérations. */
 const Tag = ({ type, small, scale = 1 }) => {
   const c = TAG_COLORS[type]; const sz = (small ? 8 : 10) * scale;
   return <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:sz,fontWeight:700,padding:`${(small?1:2)*scale}px ${(small?4:6)*scale}px`,borderRadius:3,background:c.bg,color:c.color,border:`1.5px solid ${c.border}`,letterSpacing:0.5 }}>{type}</span>;
 };
 
+/** Tag enrichi : affiche le QR code sous le libellé si une URL est définie. Utilisé dans le poster (entrée, sortie, étapes). */
 const TagWithQR = ({ tag, scale, qrSize }) => {
   const c = TAG_COLORS[tag.type]; const sz = 8 * scale; const qrPx = qrSize * scale;
   const hasUrl = tag.url && tag.url.trim().length > 0;
@@ -56,11 +96,21 @@ const TagWithQR = ({ tag, scale, qrSize }) => {
 };
 
 /* ═══════════════════ UI PRIMITIVES ═══════════════════ */
+
+/** Bouton stylisé avec variantes : couleur, petite taille, outline. Couleur par défaut = rouge Nexans. */
 const Btn = ({ children, onClick, color="#C8102E", small, outline, style:st, ...r }) => <button onClick={onClick} style={{ display:"inline-flex",alignItems:"center",gap:4,padding:small?"3px 8px":"6px 12px",borderRadius:5,border:outline?`1.5px solid ${color}`:"none",background:outline?"transparent":color,color:outline?color:"#fff",fontSize:small?11:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",...st }} {...r}>{children}</button>;
+/** Champ texte stylisé avec gestion simplifiée du onChange (reçoit directement la valeur, pas l'event). */
 const Input = ({ value, onChange, placeholder, style:st, ...r }) => <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{ width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit",outline:"none",...st }} {...r} />;
+/** Carte dépliable avec titre, contenu et actions optionnelles dans la barre de titre. */
 const SectionCard = ({ title, children, actions, defaultOpen=true }) => { const [open,setOpen]=useState(defaultOpen); return <div style={{background:"#fff",borderRadius:8,border:"1px solid #e0e0e0",overflow:"hidden",marginBottom:10}}><div onClick={()=>setOpen(!open)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#f5f5f5",cursor:"pointer",userSelect:"none"}}><span style={{fontSize:12,fontWeight:700,color:"#424242"}}>{open?"▾":"▸"} {title}</span>{actions&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4}}>{actions}</div>}</div>{open&&<div style={{padding:10}}>{children}</div>}</div>; };
 
 /* ═══════════════════ TAG EDITOR ═══════════════════ */
+
+/**
+ * Éditeur de tags pour un élément (entrée, sortie ou opération).
+ * Permet d'ajouter/supprimer des tags et d'associer une URL QR à chaque tag.
+ * Cliquer sur un tag ouvre le champ URL ; un point vert indique qu'une URL est définie.
+ */
 const TagEditor = ({ tags, onChange }) => {
   const [editId, setEditId] = useState(null);
   return (
@@ -90,6 +140,12 @@ const TagEditor = ({ tags, onChange }) => {
 };
 
 /* ═══════════════════ BOOKEND EDITOR ═══════════════════ */
+
+/**
+ * Éditeur pour les panneaux Entrée ou Sortie.
+ * Structure : tags du panneau + catégories (sections) > éléments > tags par élément.
+ * Utilise un clone profond (JSON parse/stringify) pour chaque mutation → immutabilité.
+ */
 const BookendEditor = ({ data, onChange }) => {
   const up = (fn) => { const d = JSON.parse(JSON.stringify(data)); fn(d); onChange(d); };
   return (
@@ -119,6 +175,13 @@ const BookendEditor = ({ data, onChange }) => {
 };
 
 /* ═══════════════════ STEPS EDITOR ═══════════════════ */
+
+/**
+ * Éditeur des étapes du process (zone centrale du poster).
+ * Chaque étape contient un titre, des tags de process, et des opérations.
+ * Les opérations peuvent être normales (lettre cerclée + tags) ou des points de contrôle (barre bleue).
+ * Supporte le réordonnement (↑↓) des étapes et des opérations.
+ */
 const StepsEditor = ({ steps, onChange }) => {
   const up = (fn) => { const d = JSON.parse(JSON.stringify(steps)); fn(d); onChange(d); };
   return (
@@ -155,6 +218,12 @@ const StepsEditor = ({ steps, onChange }) => {
 };
 
 /* ═══════════════════ BOOKEND PANEL (Preview) ═══════════════════ */
+
+/**
+ * Panneau latéral du poster (entrée à gauche, sortie à droite).
+ * Header coloré (vert entrée / rouge sortie) + catégories avec éléments et tags QR.
+ * Toutes les dimensions sont multipliées par `s` (fontScale) pour le scaling.
+ */
 const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
   const isE = type === "entree";
   const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
@@ -182,6 +251,14 @@ const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
 };
 
 /* ═══════════════════ POSTER PREVIEW ═══════════════════ */
+
+/**
+ * Composant principal de rendu du poster.
+ * Rendu à taille réelle (mm → px via MM_PX), puis réduit par transform: scale() dans App.
+ * Structure verticale : Header → Légende → Contenu principal → Image bandeau → Footer.
+ * Le contenu principal est horizontal : Entrée | › | Grille d'étapes | › | Sortie.
+ * L'attribut data-poster-root permet aux exports (SVG, PDF) de cibler cet élément.
+ */
 const PosterPreview = ({ data }) => {
   const fmt = FORMATS[data.format] || { w: data.customW, h: data.customH };
   const posterW = Math.round(fmt.w * MM_PX), posterH = Math.round(fmt.h * MM_PX);
@@ -299,6 +376,12 @@ const PosterPreview = ({ data }) => {
 };
 
 /* ═══════════════════ DEFAULT DATA ═══════════════════ */
+
+/**
+ * Données initiales de démonstration (ligne d'extrusion mono-couche Nexans).
+ * Retourne un nouvel objet à chaque appel (IDs uniques via uid()).
+ * Sert aussi de référence pour la structure attendue du modèle de données.
+ */
 const defaultData = () => ({
   header: { reference: "37019", processName: "Extrusion mono-couche", subtitle: "Fil isolé coloré", logoDataUrl: null },
   format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false, bookendWidth: 220, bgImageHeight: 25, pdfResolution: 3,
@@ -350,15 +433,28 @@ const defaultData = () => ({
 });
 
 /* ═══════════════════ MAIN APP ═══════════════════ */
+
+/**
+ * Composant racine de l'application.
+ * Layout split-screen : sidebar d'édition (360px) | aperçu temps réel.
+ * State unique `data` contenant tout le modèle ; mis à jour via `up()` (clone + mutation).
+ */
 export default function App() {
-  const [data, setData] = useState(defaultData);
-  const [tab, setTab] = useState("header");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const fileRef = useRef(), logoRef = useRef(), bgRef = useRef();
+  const [data, setData] = useState(defaultData);       // Modèle de données complet
+  const [tab, setTab] = useState("header");             // Onglet actif dans la sidebar
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Visibilité de la sidebar
+  const fileRef = useRef(), logoRef = useRef(), bgRef = useRef(); // Refs pour les inputs file
+
+  /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
   const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
 
+  /** Export JSON : sérialise le state complet dans un fichier téléchargeable, ré-importable via importJSON. */
   const exportJSON = () => { const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `affiche_${data.header.reference}.json`; a.click(); URL.revokeObjectURL(u); };
 
+  /**
+   * Export SVG : sérialise le DOM du poster via XMLSerializer (produit du XHTML valide),
+   * puis l'enveloppe dans un <svg><foreignObject>. Les styles inline sont ainsi embarqués.
+   */
   const exportSVG = () => {
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
@@ -375,6 +471,11 @@ ${xhtml}
     const blob = new Blob([svg], { type: "image/svg+xml" });
     const u = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = u; a.download = `affiche_${data.header.reference}.svg`; a.click(); URL.revokeObjectURL(u);
   };
+  /**
+   * Export PDF : capture le poster en PNG haute résolution via html-to-image (rendu navigateur natif),
+   * puis insère l'image dans un PDF aux dimensions exactes du format papier via jsPDF.
+   * La résolution (pixelRatio) est configurable dans l'onglet Export.
+   */
   const exportPDF = async () => {
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
@@ -385,13 +486,18 @@ ${xhtml}
     doc.addImage(dataUrl, "PNG", 0, 0, fmt.w, fmt.h);
     doc.save(`affiche_${data.header.reference}.pdf`);
   };
+  /** Import JSON : lit un fichier .json et remplace le state complet. */
   const importJSON = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { setData(JSON.parse(ev.target.result)); } catch { alert("JSON invalide"); } }; r.readAsText(f); };
+
+  /** Charge une image (logo ou bandeau) depuis un input file et la stocke en base64 dans le state. */
   const handleImg = (ref, key) => () => { const f = ref.current?.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => up(d => { if (key === "logo") d.header.logoDataUrl = ev.target.result; else d.backgroundImage = ev.target.result; }); r.readAsDataURL(f); };
 
+  /** Définition des 6 onglets de la sidebar */
   const tabs = [{ key:"header",label:"En-tête",icon:"◆" },{ key:"format",label:"Format",icon:"⊞" },{ key:"entree",label:"Entrée",icon:"▶" },{ key:"steps",label:"Process",icon:"⚙" },{ key:"sortie",label:"Sortie",icon:"◀" },{ key:"export",label:"Export",icon:"↗" }];
 
   return (
     <div style={{ display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#212121",overflow:"hidden" }}>
+      {/* ── Sidebar d'édition (360px, rétractable) ── */}
       <div style={{ width:sidebarOpen?360:0,minWidth:sidebarOpen?360:0,transition:"width 0.2s,min-width 0.2s",borderRight:"1px solid #e0e0e0",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden" }}>
         {sidebarOpen && <>
           <div style={{ padding:"12px 14px",borderBottom:"1px solid #e0e0e0",background:"#C8102E",color:"#fff" }}>
@@ -489,14 +595,17 @@ ${xhtml}
           </div>
         </>}
       </div>
+      {/* ── Zone d'aperçu (droite) ── */}
       <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden" }}>
         <div style={{ display:"flex",alignItems:"center",padding:"8px 16px",borderBottom:"1px solid #e0e0e0",background:"#fafafa",gap:12 }}>
           <button onClick={()=>setSidebarOpen(!sidebarOpen)} style={{ border:"1px solid #ddd",borderRadius:5,background:"#fff",padding:"4px 10px",cursor:"pointer",fontSize:14 }}>{sidebarOpen?"◁":"▷"}</button>
           <span style={{ fontSize:13,fontWeight:600,color:"#555" }}>Aperçu</span>
           <span style={{ fontSize:10,color:"#aaa",marginLeft:"auto" }}>{data.header.reference} — {data.format}</span>
         </div>
+        {/* Poster rendu à taille réelle puis réduit par transform: scale() pour tenir dans la fenêtre */}
         {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const sc=Math.min(1,700/Math.round(sel.w*MM_PX));return <div style={{ flex:1,overflow:"auto",padding:24,background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"flex-start" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"top center" }}><PosterPreview data={data} /></div></div>;})()}
       </div>
+      {/* Styles d'impression : masque la sidebar et supprime le scaling pour imprimer le poster en taille réelle */}
       <style>{`@media print{body>div>div:first-child,[style*="borderBottom"]{display:none!important}[style*="overflow: auto"]{overflow:visible!important;padding:0!important;background:white!important}[style*="transform"]{transform:none!important}}`}</style>
     </div>
   );

@@ -138,7 +138,7 @@ Si le contenu est coupé : réduire la police, augmenter les colonnes, ou passer
 |--------|-------|
 | **JSON** | Sauvegarde complète, ré-importable dans l'outil |
 | **SVG** | Vectoriel, éditable dans Illustrator / Inkscape |
-| **PDF** | Via Ctrl+P / Cmd+P (impression navigateur) |
+| **PDF** | Téléchargement direct, résolution configurable (1×–4×) |
 
 ---
 
