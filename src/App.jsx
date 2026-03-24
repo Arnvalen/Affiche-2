@@ -84,12 +84,12 @@ const Tag = ({ type, small, scale = 1 }) => {
 
 /** Tag enrichi : affiche le QR code sous le libellé si une URL est définie. Utilisé dans le poster (entrée, sortie, étapes). */
 const TagWithQR = ({ tag, scale, qrSize }) => {
-  const c = TAG_COLORS[tag.type]; const sz = 8 * scale; const qrPx = qrSize * scale;
+  const c = TAG_COLORS[tag.type]; const sz = 10 * scale; const qrPx = qrSize * scale;
   const hasUrl = tag.url && tag.url.trim().length > 0;
-  if (!hasUrl) return <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:sz,fontWeight:700,padding:`${1*scale}px ${4*scale}px`,borderRadius:3,background:c.bg,color:c.color,border:`1.5px solid ${c.border}`,letterSpacing:0.5 }}>{tag.type}</span>;
+  if (!hasUrl) return <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:sz,fontWeight:700,padding:`${2*scale}px ${6*scale}px`,borderRadius:3,background:c.bg,color:c.color,border:`1.5px solid ${c.border}`,letterSpacing:0.5 }}>{tag.type}</span>;
   return (
     <div style={{ display:"inline-flex",flexDirection:"column",alignItems:"center",gap:2*scale,border:`2px solid ${c.border}`,borderRadius:4,padding:3*scale,background:c.bg }}>
-      <span style={{ fontFamily:"'Courier New',monospace",fontSize:sz,fontWeight:700,color:c.color,letterSpacing:0.5,lineHeight:1 }}>{tag.type}</span>
+      <span style={{ fontFamily:"'Courier New',monospace",fontSize:sz,fontWeight:700,color:c.color,letterSpacing:0.5,lineHeight:1,padding:`0 ${2*scale}px` }}>{tag.type}</span>
       <QRCodeSVG url={tag.url} size={qrPx} bgColor={c.bg} />
     </div>
   );
@@ -205,11 +205,12 @@ const StepsEditor = ({ steps, onChange }) => {
                 <Btn small outline color="#888" onClick={()=>up(d=>{const s=d.find(x=>x.id===step.id);if(opi<s.operations.length-1)[s.operations[opi],s.operations[opi+1]]=[s.operations[opi+1],s.operations[opi]];})}>↓</Btn>
                 <span onClick={()=>up(d=>{const s=d.find(x=>x.id===step.id);s.operations=s.operations.filter(o=>o.id!==op.id);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc" }}>✕</span>
               </div>
-              {!op.isControlPoint && <TagEditor tags={op.tags} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).tags=tags;})} />}
+              {op.isControlPoint && <Input value={op.description || ""} onChange={v=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).description=v;})} style={{ fontSize:11,marginTop:4,color:"#555",fontStyle:"italic" }} placeholder="Description (optionnel)" />}
+              <TagEditor tags={op.tags||[]} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).tags=tags;})} />
             </div>
           ))}
           <Btn small outline color="#888" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),name:"Opération",tags:[]});})}>+ Opération</Btn>
-          <Btn small outline color="#1565C0" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),isControlPoint:true,name:"Point de contrôle"});})}>+ PC</Btn>
+          <Btn small outline color="#1565C0" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),isControlPoint:true,name:"Point de contrôle",description:"",tags:[]});})}>+ PC</Btn>
         </SectionCard>
       ))}
       <Btn onClick={()=>up(d=>d.push({id:uid(),title:"Nouvelle étape",tags:[],operations:[]}))} style={{ alignSelf:"flex-start" }}>+ Étape process</Btn>
@@ -238,9 +239,9 @@ const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
           <div key={sec.id}>
             <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#757575",borderBottom:"1px solid rgba(0,0,0,0.08)",paddingBottom:2*s,marginBottom:4*s,lineHeight:1.2 }}>{sec.title}</div>
             {sec.items.map(item => (
-              <div key={item.id} style={{ background:"rgba(255,255,255,0.7)",borderRadius:4,padding:`${5*s}px ${7*s}px`,marginBottom:3*s }}>
-                <div style={{ fontSize:10*s,fontWeight:500,color:"#424242",marginBottom:2*s,lineHeight:1.2 }}>{item.name}</div>
-                {renderTags(item.tags)}
+              <div key={item.id} style={{ background:"rgba(255,255,255,0.7)",borderRadius:4,padding:`${5*s}px ${7*s}px`,marginBottom:3*s,display:"flex",flexDirection:"row",alignItems:"center",gap:6*s }}>
+                <div style={{ flex:1,fontSize:10*s,fontWeight:500,color:"#424242",lineHeight:1.2 }}>{item.name}</div>
+                {(item.tags||[]).length > 0 && renderTags(item.tags)}
               </div>
             ))}
           </div>
@@ -271,7 +272,7 @@ const PosterPreview = ({ data }) => {
   const bookendW = data.bookendWidth || 220;
 
   const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
-  const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><Tag key={t.id} type={t.type} small scale={s} />)}</div>;
+  const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><Tag key={t.id} type={t.type} scale={s} />)}</div>;
 
   const renderStep = (step, si) => (
     <div key={step.id} style={{ flex:"1 1 0%",minWidth:0,borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",border:"1.5px solid #e0e0e0" }}>
@@ -286,20 +287,22 @@ const PosterPreview = ({ data }) => {
         {step.operations.map((item, idx) => {
           if (item.isControlPoint) {
             return (
-              <div key={item.id} style={{ display:"flex",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${6*s}px ${12*s}px`,fontSize:12*s,fontWeight:700,color:"#1565C0",background:"#E3F2FD",border:"2px solid #90CAF9",textTransform:"uppercase",letterSpacing:1 }}>
-                {item.name}
+              <div key={item.id} style={{ display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${6*s}px ${12*s}px`,background:"#E3F2FD",border:"2px solid #90CAF9",gap:6*s }}>
+                <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2*s,flex:1 }}>
+                  <span style={{ fontSize:10*s,fontWeight:700,color:"#1565C0",textTransform:"uppercase",letterSpacing:1 }}>{item.name}</span>
+                  {item.description && <span style={{ fontSize:9*s,fontWeight:400,color:"#1565C0",textTransform:"none",letterSpacing:0 }}>{item.description}</span>}
+                </div>
+                {(item.tags||[]).length > 0 && renderTagsPlain(item.tags)}
               </div>
             );
           } else {
             const operLetterIndex = step.operations.slice(0, idx).filter(o => !o.isControlPoint).length;
             const operationLetter = String.fromCharCode(65 + operLetterIndex);
             return (
-              <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"column",gap:3*s }}>
-                <div style={{ display:"flex",alignItems:"center",gap:6*s }}>
-                  <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:"2.5px solid #000",background:"#fafafa",color:"#000",minWidth:24*s,height:24*s,flexShrink:0 }}>{operationLetter}</span>
-                  <div style={{ fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
-                </div>
-                {renderTagsPlain(item.tags)}
+              <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"row",alignItems:"center",gap:6*s }}>
+                <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:"2.5px solid #000",background:"#fafafa",color:"#000",minWidth:24*s,height:24*s,flexShrink:0 }}>{operationLetter}</span>
+                <div style={{ flex:1,fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
+                {item.tags.length > 0 && renderTagsPlain(item.tags)}
               </div>
             );
           }
@@ -308,15 +311,27 @@ const PosterPreview = ({ data }) => {
     </div>
   );
 
-  const renderRow = (rowSteps, ri) => (
-    <div key={ri} style={{ display:"flex",gap:10*s,width:"100%" }}>
-      {rowSteps.map((step, ci) => renderStep(step, ri * maxCols + ci))}
-      {rowSteps.length < maxCols && Array.from({ length: maxCols - rowSteps.length }).map((_, k) => <div key={`e${k}`} style={{ flex:"1 1 0%",minWidth:0 }} />)}
+  const stepConnector = (key) => (
+    <div key={key} style={{ display:"flex",alignItems:"center",justifyContent:"center",width:12*s,flexShrink:0,color:"#E87722" }}>
+      <svg width={10*s} height={10*s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
     </div>
   );
 
-  const rowConn = <div style={{ display:"flex",alignItems:"center",justifyContent:"center",padding:`${2*s}px 0`,color:"#ccc" }}><svg width={18*s} height={18*s} viewBox="0 0 24 24" fill="currentColor"><path d="M12 16.59L6.41 11 5 12.41 12 19.41 19 12.41 17.59 11z"/></svg></div>;
-  const arrowSt = { display:"flex",alignItems:"center",justifyContent:"center",width:20*s,minWidth:20*s,color:"#bbb",fontSize:18*s,flexShrink:0 };
+  const renderRow = (rowSteps, ri) => {
+    const cells = [];
+    for (let ci = 0; ci < maxCols; ci++) {
+      if (ci > 0) cells.push(stepConnector(`arr-${ri}-${ci}`));
+      if (ci < rowSteps.length) {
+        cells.push(renderStep(rowSteps[ci], ri * maxCols + ci));
+      } else {
+        cells.push(<div key={`e${ci}`} style={{ flex:"1 1 0%",minWidth:0 }} />);
+      }
+    }
+    return <div key={ri} style={{ display:"flex",gap:0,width:"100%" }}>{cells}</div>;
+  };
+
+  const rowConn = <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:`${3*s}px 0`,color:"#E87722",paddingRight:8*s }}><svg width={16*s} height={16*s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z"/></svg></div>;
+  const arrowSt = { display:"flex",alignItems:"center",justifyContent:"center",width:28*s,minWidth:28*s,flexShrink:0,color:"#E87722" };
 
   const forceH = data.forceFormat;
 
@@ -350,11 +365,11 @@ const PosterPreview = ({ data }) => {
       {/* Main */}
       <div style={{ display:"flex",padding:`${14*s}px ${16*s}px`,gap:10*s,alignItems:"stretch",flex:1 }}>
         <BookendPanel bookendData={data.entree} type="entree" s={s} qrSize={qrSize} width={bookendW} />
-        <div style={arrowSt}>›</div>
+        <div style={arrowSt}><svg width={20*s} height={20*s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         <div style={{ flex:1,display:"flex",flexDirection:"column",gap:0,minWidth:0 }}>
           {rows.map((rowSteps, ri) => <div key={ri}>{ri > 0 && rowConn}{renderRow(rowSteps, ri)}</div>)}
         </div>
-        <div style={arrowSt}>›</div>
+        <div style={arrowSt}><svg width={20*s} height={20*s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         <BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} width={bookendW} />
       </div>
 
@@ -406,12 +421,12 @@ const defaultData = () => ({
     { id: uid(), title: "Extrusion", tags: [{ id: uid(), type: "SWI", url: "https://nexans.com/swi-extrusion" }, { id: uid(), type: "IC", url: "" }], operations: [
       { id: uid(), name: "Alim. HDPE", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
       { id: uid(), name: "Alim. colorant", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), isControlPoint: true, name: "Point de contrôle" },
+      { id: uid(), isControlPoint: true, name: "Point de contrôle", description: "", tags: [] },
       { id: uid(), name: "Dosage", tags: [{ id: uid(), type: "IC", url: "" }] },
     ]},
     { id: uid(), title: "Refroidissement", tags: [], operations: [
       { id: uid(), name: "Contrôle qualité", tags: [{ id: uid(), type: "AQE", url: "" }] },
-      { id: uid(), isControlPoint: true, name: "Vérification" },
+      { id: uid(), isControlPoint: true, name: "Vérification", description: "", tags: [] },
       { id: uid(), name: "Liste de contrôle", tags: [{ id: uid(), type: "LC", url: "" }] },
     ]},
   ],
@@ -444,9 +459,23 @@ export default function App() {
   const [tab, setTab] = useState("header");             // Onglet actif dans la sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true); // Visibilité de la sidebar
   const fileRef = useRef(), logoRef = useRef(), bgRef = useRef(); // Refs pour les inputs file
+  const previewContainerRef = useRef();
+  const [previewSize, setPreviewSize] = useState({ w: 700, h: 500 });
+  const [libDirHandle, setLibDirHandle] = useState(null);
+  const [libFiles, setLibFiles] = useState([]);
 
   /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
   const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
+
+  useEffect(() => {
+    if (!previewContainerRef.current) return;
+    const obs = new ResizeObserver(entries => {
+      const { width, height } = entries[0].contentRect;
+      setPreviewSize({ w: width, h: height });
+    });
+    obs.observe(previewContainerRef.current);
+    return () => obs.disconnect();
+  }, []);
 
   /** Export JSON : sérialise le state complet dans un fichier téléchargeable, ré-importable via importJSON. */
   const exportJSON = () => { const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `affiche_${data.header.reference}.json`; a.click(); URL.revokeObjectURL(u); };
@@ -492,8 +521,44 @@ ${xhtml}
   /** Charge une image (logo ou bandeau) depuis un input file et la stocke en base64 dans le state. */
   const handleImg = (ref, key) => () => { const f = ref.current?.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => up(d => { if (key === "logo") d.header.logoDataUrl = ev.target.result; else d.backgroundImage = ev.target.result; }); r.readAsDataURL(f); };
 
-  /** Définition des 6 onglets de la sidebar */
-  const tabs = [{ key:"header",label:"En-tête",icon:"◆" },{ key:"format",label:"Format",icon:"⊞" },{ key:"entree",label:"Entrée",icon:"▶" },{ key:"steps",label:"Process",icon:"⚙" },{ key:"sortie",label:"Sortie",icon:"◀" },{ key:"export",label:"Export",icon:"↗" }];
+  const refreshLibrary = async (handle = libDirHandle) => {
+    if (!handle) return;
+    const files = [];
+    for await (const [name] of handle.entries()) { if (name.endsWith('.json')) files.push(name); }
+    setLibFiles(files.sort());
+  };
+  const openLibraryDir = async () => {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      setLibDirHandle(handle);
+      const files = [];
+      for await (const [name] of handle.entries()) { if (name.endsWith('.json')) files.push(name); }
+      setLibFiles(files.sort());
+    } catch {}
+  };
+  const saveToLibrary = async () => {
+    if (!libDirHandle) return;
+    const name = `affiche_${data.header.reference}.json`;
+    const fh = await libDirHandle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(JSON.stringify(data, null, 2));
+    await w.close();
+    await refreshLibrary();
+  };
+  const loadFromLibrary = async (name) => {
+    if (!libDirHandle) return;
+    const fh = await libDirHandle.getFileHandle(name);
+    const file = await fh.getFile();
+    try { setData(JSON.parse(await file.text())); } catch { alert('JSON invalide'); }
+  };
+  const deleteFromLibrary = async (name) => {
+    if (!libDirHandle || !confirm(`Supprimer ${name} ?`)) return;
+    await libDirHandle.removeEntry(name);
+    await refreshLibrary();
+  };
+
+  /** Définition des 7 onglets de la sidebar */
+  const tabs = [{ key:"header",label:"En-tête",icon:"◆" },{ key:"format",label:"Format",icon:"⊞" },{ key:"entree",label:"Entrée",icon:"▶" },{ key:"steps",label:"Process",icon:"⚙" },{ key:"sortie",label:"Sortie",icon:"◀" },{ key:"export",label:"Export",icon:"↗" },{ key:"library",label:"Biblio",icon:"📚" }];
 
   return (
     <div style={{ display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#212121",overflow:"hidden" }}>
@@ -592,6 +657,35 @@ ${xhtml}
                 <Btn outline color="#d32f2f" onClick={()=>{if(confirm("Réinitialiser ?"))setData(defaultData());}}>↺ Réinitialiser</Btn>
               </div>
             )}
+            {tab === "library" && (
+              <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+                {!libDirHandle ? (
+                  <>
+                    <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}>Choisis le dossier <strong>library/</strong> du projet pour sauvegarder et charger des affiches JSON.</div>
+                    <Btn onClick={openLibraryDir} color="#555">📁 Choisir le dossier library/</Btn>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display:"flex",gap:6 }}>
+                      <Btn onClick={saveToLibrary} style={{ flex:1 }}>💾 Sauvegarder</Btn>
+                      <Btn outline color="#888" onClick={()=>refreshLibrary()}>↺</Btn>
+                      <Btn outline color="#555" onClick={openLibraryDir}>📁</Btn>
+                    </div>
+                    <div style={{ fontSize:10,color:"#999",padding:"0 2px" }}>📂 {libDirHandle.name}/</div>
+                    {libFiles.length === 0
+                      ? <div style={{ fontSize:11,color:"#bbb",textAlign:"center",padding:20 }}>Aucun fichier JSON</div>
+                      : libFiles.map(name => (
+                        <div key={name} style={{ display:"flex",alignItems:"center",gap:6,background:"#fafafa",border:"1px solid #eee",borderRadius:5,padding:"6px 8px" }}>
+                          <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{name}</span>
+                          <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
+                          <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:12 }}>✕</span>
+                        </div>
+                      ))
+                    }
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </>}
       </div>
@@ -603,7 +697,7 @@ ${xhtml}
           <span style={{ fontSize:10,color:"#aaa",marginLeft:"auto" }}>{data.header.reference} — {data.format}</span>
         </div>
         {/* Poster rendu à taille réelle puis réduit par transform: scale() pour tenir dans la fenêtre */}
-        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const sc=Math.min(1,700/Math.round(sel.w*MM_PX));return <div style={{ flex:1,overflow:"auto",padding:24,background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"flex-start" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"top center" }}><PosterPreview data={data} /></div></div>;})()}
+        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}><PosterPreview data={data} /></div></div>;})()}
       </div>
       {/* Styles d'impression : masque la sidebar et supprime le scaling pour imprimer le poster en taille réelle */}
       <style>{`@media print{body>div>div:first-child,[style*="borderBottom"]{display:none!important}[style*="overflow: auto"]{overflow:visible!important;padding:0!important;background:white!important}[style*="transform"]{transform:none!important}}`}</style>
