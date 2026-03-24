@@ -12,7 +12,7 @@
  * Tous les styles sont inline (objets React) pour simplifier les exports
  * SVG/PDF qui capturent le DOM directement.
  */
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
 import QRCode from "qrcode";            // Génération de la matrice QR
 import { toPng } from "html-to-image";  // Capture DOM → PNG via rendu navigateur natif
 import { jsPDF } from "jspdf";          // Création de fichiers PDF
@@ -40,8 +40,20 @@ const FORMATS = { "A0-paysage":{w:1189,h:841},"A1-paysage":{w:841,h:594},"A2-pay
 /** Facteur de conversion millimètres → pixels pour le rendu écran (arbitraire, pas un DPI standard) */
 const MM_PX = 1.4;
 
+/** Palette de couleurs pour les zones de la ligne de production (indexée par position du step) */
+const ZONE_COLORS = ["#1565C0","#00838F","#E65100","#6A1B9A","#AD1457","#F57F17","#4E342E","#37474F"];
+
 /** Générateur d'IDs uniques pour les éléments du modèle de données */
 let _id = 100; const uid = () => `_${_id++}`;
+
+/** Supprime width/height fixes du SVG root et force width:100%;height:100% pour qu'il remplisse son conteneur sans déformation. */
+/** Convertit un SVG texte en data URL pour utilisation dans <img>. Le navigateur gère le scaling nativement (height fixe + width:auto = ratio conservé). */
+const svgUrl = (svgData) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+
+/** Composant image SVG scalée : height fixe en px, width auto, centrée. */
+const SvgIcon = ({ svgData, height, style }) => (
+  <img src={svgUrl(svgData)} alt="" style={{ height, width:'auto', maxWidth:'100%', display:'block', objectFit:'contain', ...style }} />
+);
 
 /* ═══════════════════ QR SVG COMPONENT ═══════════════════ */
 
@@ -182,7 +194,7 @@ const BookendEditor = ({ data, onChange }) => {
  * Les opérations peuvent être normales (lettre cerclée + tags) ou des points de contrôle (barre bleue).
  * Supporte le réordonnement (↑↓) des étapes et des opérations.
  */
-const StepsEditor = ({ steps, onChange }) => {
+const StepsEditor = ({ steps, onChange, line, icons }) => {
   const up = (fn) => { const d = JSON.parse(JSON.stringify(steps)); fn(d); onChange(d); };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
@@ -207,6 +219,16 @@ const StepsEditor = ({ steps, onChange }) => {
               </div>
               {op.isControlPoint && <Input value={op.description || ""} onChange={v=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).description=v;})} style={{ fontSize:11,marginTop:4,color:"#555",fontStyle:"italic" }} placeholder="Description (optionnel)" />}
               <TagEditor tags={op.tags||[]} onChange={tags=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).tags=tags;})} />
+              {(line||[]).length>0&&(
+                <div style={{display:"flex",alignItems:"center",gap:4,marginTop:4}}>
+                  <span style={{fontSize:10,color:"#888",flexShrink:0}}>Machine :</span>
+                  <select value={op.lineItemId||''} onChange={e=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).lineItemId=e.target.value||null;})}
+                    style={{fontSize:10,padding:"2px 4px",border:"1px solid #ddd",borderRadius:3,flex:1}}>
+                    <option value="">— Aucune —</option>
+                    {(line||[]).map(m=>{const ic=(icons||[]).find(i=>i.id===m.iconId);return <option key={m.id} value={m.id}>{ic?.name||m.id}</option>;})}
+                  </select>
+                </div>
+              )}
             </div>
           ))}
           <Btn small outline color="#888" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),name:"Opération",tags:[]});})}>+ Opération</Btn>
@@ -274,33 +296,48 @@ const PosterPreview = ({ data }) => {
   const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
   const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><Tag key={t.id} type={t.type} scale={s} />)}</div>;
 
-  const renderStep = (step, si) => (
-    <div key={step.id} style={{ flex:"1 1 0%",minWidth:0,borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",border:"1.5px solid #e0e0e0" }}>
-      <div style={{ display:"flex",alignItems:"center",gap:8*s,padding:`${7*s}px ${12*s}px`,background:"#212121",color:"#fff" }}>
-        <div style={{ fontFamily:"monospace",fontSize:14*s,fontWeight:700,background:"#E87722",color:"#fff",width:22*s,height:22*s,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{si+1}</div>
+  const getMachineInfo = (lineItemId) => {
+    const item = (data.line||[]).find(m => m.id === lineItemId);
+    if (!item) return null;
+    const zoneItems = (data.line||[]).filter(m => m.stepId === item.stepId);
+    const idx = zoneItems.findIndex(m => m.id === lineItemId);
+    const si2 = item.stepId ? data.steps.findIndex(s => s.id === item.stepId) : -1;
+    return { letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?', color: si2 >= 0 ? ZONE_COLORS[si2 % ZONE_COLORS.length] : '#9E9E9E' };
+  };
+
+  const renderStep = (step, si) => {
+    const zc = ZONE_COLORS[si%ZONE_COLORS.length];
+    return (
+    <div key={step.id} style={{ flex:"1 1 0%",minWidth:0,borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",border:`1.5px solid ${zc}` }}>
+      <div style={{ display:"flex",alignItems:"center",gap:8*s,padding:`${7*s}px ${12*s}px`,background:zc,color:"#fff" }}>
+        <div style={{ fontFamily:"monospace",fontSize:14*s,fontWeight:700,background:"rgba(255,255,255,0.25)",color:"#fff",width:22*s,height:22*s,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{si+1}</div>
         <div style={{ flex:1,display:"flex",alignItems:"center",gap:4*s,minWidth:0 }}>
           <div style={{ fontSize:11*s,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis" }}>{step.title}</div>
           {(step.tags || []).length > 0 && renderTags(step.tags || [])}
         </div>
       </div>
-      <div style={{ flex:1,padding:8*s,display:"flex",flexDirection:"column",gap:5*s,background:"#fff" }}>
-        {step.operations.map((item, idx) => {
+      <div style={{ flex:1,padding:8*s,display:"flex",flexDirection:"column",gap:5*s,background:zc+"18" }}>
+        {step.operations.map((item) => {
           if (item.isControlPoint) {
+            const pcMachineInfo = item.lineItemId ? getMachineInfo(item.lineItemId) : null;
             return (
-              <div key={item.id} style={{ display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${6*s}px ${12*s}px`,background:"#E3F2FD",border:"2px solid #90CAF9",gap:6*s }}>
-                <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2*s,flex:1 }}>
-                  <span style={{ fontSize:10*s,fontWeight:700,color:"#1565C0",textTransform:"uppercase",letterSpacing:1 }}>{item.name}</span>
-                  {item.description && <span style={{ fontSize:9*s,fontWeight:400,color:"#1565C0",textTransform:"none",letterSpacing:0 }}>{item.description}</span>}
+              <div key={item.id} style={{ display:"flex",flexDirection:"row",alignItems:"center",padding:`${6*s}px ${8*s}px`,gap:6*s }}>
+                {pcMachineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,borderRadius:"50%",border:`2.5px solid ${pcMachineInfo.color}`,background:pcMachineInfo.color+"18",color:pcMachineInfo.color,minWidth:24*s,height:24*s,flexShrink:0 }}>{pcMachineInfo.letter}</span>}
+                <div style={{ flex:1,display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${4*s}px ${8*s}px`,background:"#E3F2FD",border:"2px solid #90CAF9",gap:6*s }}>
+                  <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2*s,flex:1 }}>
+                    <span style={{ fontSize:10*s,fontWeight:700,color:"#1565C0",textTransform:"uppercase",letterSpacing:1 }}>{item.name}</span>
+                    {item.description && <span style={{ fontSize:9*s,fontWeight:400,color:"#1565C0",textTransform:"none",letterSpacing:0 }}>{item.description}</span>}
+                  </div>
+                  {(item.tags||[]).length > 0 && renderTagsPlain(item.tags)}
                 </div>
-                {(item.tags||[]).length > 0 && renderTagsPlain(item.tags)}
               </div>
             );
           } else {
-            const operLetterIndex = step.operations.slice(0, idx).filter(o => !o.isControlPoint).length;
-            const operationLetter = String.fromCharCode(65 + operLetterIndex);
+            const machineInfo = item.lineItemId ? getMachineInfo(item.lineItemId) : null;
+            const cc = machineInfo ? machineInfo.color : null;
             return (
               <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"row",alignItems:"center",gap:6*s }}>
-                <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:"2.5px solid #000",background:"#fafafa",color:"#000",minWidth:24*s,height:24*s,flexShrink:0 }}>{operationLetter}</span>
+                {machineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:`2.5px solid ${cc}`,background:cc+"18",color:cc,minWidth:24*s,height:24*s,flexShrink:0 }}>{machineInfo.letter}</span>}
                 <div style={{ flex:1,fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
                 {item.tags.length > 0 && renderTagsPlain(item.tags)}
               </div>
@@ -310,6 +347,7 @@ const PosterPreview = ({ data }) => {
       </div>
     </div>
   );
+  };
 
   const stepConnector = (key) => (
     <div key={key} style={{ display:"flex",alignItems:"center",justifyContent:"center",width:12*s,flexShrink:0,color:"#E87722" }}>
@@ -373,12 +411,80 @@ const PosterPreview = ({ data }) => {
         <BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} width={bookendW} />
       </div>
 
-      {/* Background image — propre bloc, sans déformation */}
-      {data.backgroundImage && (()=>{const bh=posterH*((data.bgImageHeight||25)/100);return(
-        <div style={{ flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"center",background:"#f0f0f0",height:bh,overflow:"hidden" }}>
-          <img src={data.backgroundImage} alt="" style={{ maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block" }} />
-        </div>
-      );})()}
+      {/* Ligne de production ou image bandeau */}
+      {(()=>{
+        const bh=posterH*((data.bgImageHeight||25)/100);
+        const hasLine=(data.line||[]).length>0;
+        const hasImg=!!data.backgroundImage;
+        if(!hasLine&&!hasImg) return null;
+        if(!hasLine) return(
+          <div style={{flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"center",background:"#f0f0f0",height:bh,overflow:"hidden"}}>
+            <img src={data.backgroundImage} alt="" style={{maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block"}} />
+          </div>
+        );
+
+        // Groupement par zone (ordre data.steps) + non-liés en dernier
+        const unlinked=(data.line||[]).filter(m=>!m.stepId);
+        const byStep=data.steps.map((st,si)=>({
+          step:st,color:ZONE_COLORS[si%ZONE_COLORS.length],stepIndex:si,
+          machines:(data.line||[]).filter(m=>m.stepId===st.id)
+        })).filter(z=>z.machines.length>0);
+        const zones=[...byStep,...(unlinked.length?[{step:null,color:"#9E9E9E",stepIndex:-1,machines:unlinked}]:[])];
+        if(!zones.length) return null;
+
+        const getLinkedOp=(lineItemId)=>{for(const st of data.steps)for(const op of(st.operations||[]))if(op.lineItemId===lineItemId)return op;return null;};
+        const iconH=bh*0.52;
+
+        return(
+          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"center",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px`,overflow:"hidden"}}>
+            {zones.map((zone,zi)=>(
+              <Fragment key={zone.step?.id||"unlinked"}>
+                {/* Séparateur entre zones */}
+                {zi>0&&(
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,gap:2*s}}>
+                    <div style={{width:0,height:bh*0.4,borderLeft:"1.5px dashed #ccc"}} />
+                    <span style={{color:"#E87722",fontSize:9*s,fontWeight:700,lineHeight:1}}>→</span>
+                    <div style={{width:0,height:bh*0.4,borderLeft:"1.5px dashed #ccc"}} />
+                  </div>
+                )}
+                {/* Zone — numéro au-dessus du rectangle arrondi */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,gap:2*s}}>
+                  {/* Numéro centré au-dessus */}
+                  <div style={{width:12*s,height:12*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:6.5*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {zone.stepIndex>=0?zone.stepIndex+1:"?"}
+                  </div>
+                  {/* Rectangle arrondi */}
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,border:`2px solid ${zone.color}`,borderRadius:6*s,background:zone.color+"18",padding:`${3*s}px ${6*s}px`}}>
+                  {/* Machines */}
+                  <div style={{display:"flex",alignItems:"flex-end",gap:4*s}}>
+                    {zone.machines.map((item,mi)=>{
+                      const icon=(data.icons||[]).find(ic=>ic.id===item.iconId);
+                      if(!icon) return null;
+                      const letter=String.fromCharCode(65+mi);
+                      const linkedOp=getLinkedOp(item.id);
+                      return(
+                        <Fragment key={item.id}>
+                          {mi>0&&<div style={{alignSelf:"stretch",display:"flex",alignItems:"center",flexShrink:0}}><span style={{color:zone.color,fontSize:14*s,fontWeight:900}}>→</span></div>}
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s,flexShrink:0}}>
+                            {/* Lettre + tags en dessous, centrés */}
+                            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s}}>
+                              <div style={{width:10*s,height:10*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:6*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{letter}</div>
+                              {linkedOp&&(linkedOp.tags||[]).length>0&&<div style={{display:"flex",gap:1*s,flexWrap:"wrap",justifyContent:"center"}}>{linkedOp.tags.map(t=><Tag key={t.id} type={t.type} scale={s*0.65} small />)}</div>}
+                            </div>
+                            <SvgIcon svgData={icon.svgData} height={iconH*(item.size||1)} />
+                            <span style={{fontSize:5.5*s,color:"#555",fontWeight:600,textAlign:"center",maxWidth:iconH*(item.size||1)*1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{icon.name}</span>
+                          </div>
+                        </Fragment>
+                      );
+                    })}
+                  </div>
+                  </div>{/* /rectangle arrondi */}
+                </div>{/* /outer column */}
+              </Fragment>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Footer */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:"#212121",color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
@@ -445,7 +551,182 @@ const defaultData = () => ({
     ]},
   ]},
   backgroundImage: null,
+  icons: [],
+  line: [],
 });
+
+/* ═══════════════════ LINE EDITOR ═══════════════════ */
+
+const LineEditor = ({ icons, line, steps, onChange, libDirHandle, libSvgFiles, onLoadSvg }) => {
+  const iconFileRef = useRef();
+
+  const upIcons = (newIcons) => onChange({ icons: newIcons, line });
+  const upLine  = (newLine)  => onChange({ icons, line: newLine });
+
+  const importSVGs = (files) => {
+    const toRead = Array.from(files);
+    let done = 0;
+    const newIcons = [];
+    toRead.forEach(file => {
+      const r = new FileReader();
+      r.onload = (ev) => {
+        newIcons.push({ id: uid(), name: file.name.replace(/\.svg$/i,''), description:'', svgData: ev.target.result });
+        done++;
+        if (done === toRead.length) onChange({ icons:[...icons,...newIcons], line });
+      };
+      r.readAsText(file);
+    });
+  };
+
+  const addToLine = (iconId) => upLine([...line, { id:uid(), iconId, stepId:null }]);
+  const removeFromLine = (id) => upLine(line.filter(m => m.id !== id));
+  const removeIcon = (iconId) => {
+    upIcons(icons.filter(ic => ic.id !== iconId));
+    upLine(line.filter(m => m.iconId !== iconId));
+  };
+  const updateLineItem = (id, patch) => upLine(line.map(m => m.id===id ? {...m,...patch} : m));
+  const moveInZone = (itemId, dir) => {
+    const item = line.find(m => m.id === itemId);
+    if (!item) return;
+    const zoneItems = line.filter(m => m.stepId === item.stepId);
+    const zi = zoneItems.findIndex(m => m.id === itemId);
+    const target = zoneItems[zi + dir];
+    if (!target) return;
+    const newLine = [...line];
+    const i1 = newLine.findIndex(m => m.id === itemId);
+    const i2 = newLine.findIndex(m => m.id === target.id);
+    [newLine[i1], newLine[i2]] = [newLine[i2], newLine[i1]];
+    upLine(newLine);
+  };
+
+  // Drag from library to line-drop zone
+  const onDragStart = (e, iconId) => e.dataTransfer.setData('iconId', iconId);
+  const onDropZone  = (e) => { e.preventDefault(); const id=e.dataTransfer.getData('iconId'); if(id) addToLine(id); };
+
+  const card = { borderRadius:6, padding:'6px 8px', border:'1px solid #eee', background:'#fafafa', display:'flex', alignItems:'center', gap:6, cursor:'grab' };
+
+  return (
+    <div style={{ display:'flex',flexDirection:'column',gap:14 }}>
+      {/* ── SVG depuis la bibliothèque dossier ── */}
+      {libDirHandle && libSvgFiles.length > 0 && (
+        <div>
+          <label style={{ fontSize:11,fontWeight:700,color:'#555',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6 }}>📂 {libDirHandle.name}/ — SVG disponibles</label>
+          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+            {libSvgFiles.map(name => {
+              const already = icons.some(ic => ic.name === name.replace(/\.svg$/i,''));
+              return (
+                <div key={name} style={{display:'flex',alignItems:'center',gap:6,background:'#f5f5f5',border:'1px solid #eee',borderRadius:5,padding:'4px 8px'}}>
+                  <span style={{flex:1,fontSize:11,color:'#444',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</span>
+                  {already
+                    ? <span style={{fontSize:10,color:'#aaa'}}>déjà chargé</span>
+                    : <Btn small onClick={()=>onLoadSvg(name)}>+ Charger</Btn>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Bibliothèque locale (upload) ── */}
+      <div>
+        <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6 }}>
+          <label style={{ fontSize:11,fontWeight:700,color:'#555',textTransform:'uppercase',letterSpacing:0.5 }}>Bibliothèque d'icônes</label>
+          <Btn small onClick={()=>iconFileRef.current?.click()}>+ Importer SVG</Btn>
+          <input ref={iconFileRef} type="file" accept=".svg" multiple style={{display:'none'}} onChange={e=>{ importSVGs(e.target.files); e.target.value=''; }} />
+        </div>
+        {icons.length===0
+          ? <div style={{fontSize:11,color:'#bbb',textAlign:'center',padding:16}}>Aucune icône — importer des .svg</div>
+          : <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6}}>
+              {icons.map(ic=>(
+                <div key={ic.id} style={{...card,flexDirection:'column',alignItems:'stretch',cursor:'grab',position:'relative'}}
+                  draggable onDragStart={e=>onDragStart(e,ic.id)}
+                  title={ic.name}>
+                  <div style={{width:'100%',height:48,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}}>
+                    <SvgIcon svgData={ic.svgData} height={48} />
+                  </div>
+                  <div style={{fontSize:9,color:'#555',textAlign:'center',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ic.name}</div>
+                  <span onClick={()=>removeIcon(ic.id)} style={{position:'absolute',top:2,right:4,fontSize:10,color:'#ccc',cursor:'pointer'}}>✕</span>
+                  <button onClick={()=>addToLine(ic.id)} style={{marginTop:2,fontSize:9,padding:'1px 4px',border:'1px solid #ddd',borderRadius:3,background:'#fff',cursor:'pointer',color:'#555'}}>+ Ligne</button>
+                </div>
+              ))}
+            </div>
+        }
+      </div>
+
+      {/* ── Composition de la ligne — vue par zones ── */}
+      <div>
+        <label style={{ fontSize:11,fontWeight:700,color:'#555',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6 }}>Ligne de production</label>
+        {(()=>{
+          const unlinked = line.filter(m=>!m.stepId);
+          const byStep = steps.map((st,si)=>({
+            step:st, color:ZONE_COLORS[si%ZONE_COLORS.length], stepIndex:si,
+            machines:line.filter(m=>m.stepId===st.id)
+          })).filter(z=>z.machines.length>0);
+          const zones=[...byStep,...(unlinked.length?[{step:null,color:'#9E9E9E',stepIndex:-1,machines:unlinked}]:[])];
+
+          if(line.length===0) return (
+            <div onDragOver={e=>e.preventDefault()} onDrop={onDropZone}
+              style={{minHeight:60,border:'2px dashed #ddd',borderRadius:8,padding:8,background:'#fafafa',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <span style={{fontSize:11,color:'#bbb'}}>Glisser des icônes ici depuis la bibliothèque</span>
+            </div>
+          );
+
+          return (
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {zones.map(zone=>(
+                <div key={zone.step?.id||'unlinked'} style={{borderRadius:8,border:`2px solid ${zone.color}`,background:zone.color+'12',padding:'8px'}}>
+                  {/* Numéro centré en haut */}
+                  <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
+                    <div style={{width:18,height:18,borderRadius:'50%',background:zone.color,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                      {zone.stepIndex>=0?zone.stepIndex+1:'?'}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',alignItems:'flex-start',gap:4,flexWrap:'wrap'}}>
+                    {zone.machines.map((item,mi)=>{
+                      const icon=icons.find(ic=>ic.id===item.iconId);
+                      if(!icon) return null;
+                      const letter=String.fromCharCode(65+mi);
+                      return (
+                        <Fragment key={item.id}>
+                          {mi>0&&<span style={{color:zone.color,fontSize:20,fontWeight:900,alignSelf:'center'}}>→</span>}
+                          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'#fafafa',border:'1px solid #eee',borderRadius:6,padding:'6px 8px',minWidth:60}}>
+                            <div style={{width:16,height:16,borderRadius:'50%',background:zone.color,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{letter}</div>
+                            <SvgIcon svgData={icon.svgData} height={32} />
+                            <span style={{fontSize:8,color:'#555',textAlign:'center',maxWidth:56,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{icon.name}</span>
+                            <select value={item.stepId||''} onChange={e=>updateLineItem(item.id,{stepId:e.target.value||null})}
+                              style={{fontSize:8,padding:'1px 2px',border:'1px solid #ddd',borderRadius:3,maxWidth:64}}>
+                              <option value="">— —</option>
+                              {steps.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+                            </select>
+
+                            <div style={{display:'flex',gap:2}}>
+                              <span onClick={()=>moveInZone(item.id,-1)} style={{cursor:'pointer',fontSize:10,color:'#aaa',padding:'0 2px'}}>←</span>
+                              <span onClick={()=>moveInZone(item.id,1)}  style={{cursor:'pointer',fontSize:10,color:'#aaa',padding:'0 2px'}}>→</span>
+                              <span onClick={()=>removeFromLine(item.id)} style={{cursor:'pointer',fontSize:9,color:'#ccc',padding:'0 2px'}}>✕</span>
+                            </div>
+                          </div>
+                        </Fragment>
+                      );
+                    })}
+                    {/* Drop target pour ajouter une machine dans cette zone */}
+                    <div onDragOver={e=>e.preventDefault()}
+                      onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('iconId');if(id){const stepId=zone.step?.id||null;upLine([...line,{id:uid(),iconId:id,stepId}]);}}}
+                      style={{width:40,height:56,border:'2px dashed #ddd',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:20,cursor:'copy',alignSelf:'center'}}>+</div>
+                  </div>
+                </div>
+              ))}
+              {/* Zone de drop globale pour les nouvelles icônes sans step */}
+              <div onDragOver={e=>e.preventDefault()} onDrop={onDropZone}
+                style={{border:'2px dashed #e0e0e0',borderRadius:6,padding:'6px 10px',display:'flex',alignItems:'center',justifyContent:'center',color:'#bbb',fontSize:10,cursor:'copy'}}>
+                ＋ Glisser une icône ici pour l'ajouter sans zone
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+};
 
 /* ═══════════════════ MAIN APP ═══════════════════ */
 
@@ -463,6 +744,7 @@ export default function App() {
   const [previewSize, setPreviewSize] = useState({ w: 700, h: 500 });
   const [libDirHandle, setLibDirHandle] = useState(null);
   const [libFiles, setLibFiles] = useState([]);
+  const [libSvgFiles, setLibSvgFiles] = useState([]);
 
   /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
   const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
@@ -523,9 +805,25 @@ ${xhtml}
 
   const refreshLibrary = async (handle = libDirHandle) => {
     if (!handle) return;
-    const files = [];
-    for await (const [name] of handle.entries()) { if (name.endsWith('.json')) files.push(name); }
-    setLibFiles(files.sort());
+    const jsons = [], svgs = [];
+    for await (const [name] of handle.entries()) {
+      if (name.endsWith('.json')) jsons.push(name);
+      else if (name.endsWith('.svg')) svgs.push(name);
+    }
+    setLibFiles(jsons.sort());
+    setLibSvgFiles(svgs.sort());
+  };
+
+  const loadSvgFromLib = async (name) => {
+    if (!libDirHandle) return;
+    const fh = await libDirHandle.getFileHandle(name);
+    const file = await fh.getFile();
+    const svgData = await file.text();
+    up(d => {
+      if (!d.icons) d.icons = [];
+      if (!d.icons.find(ic => ic.name === name.replace(/\.svg$/i, '')))
+        d.icons.push({ id: uid(), name: name.replace(/\.svg$/i, ''), description: '', svgData });
+    });
   };
   const openLibraryDir = async () => {
     try {
@@ -558,7 +856,7 @@ ${xhtml}
   };
 
   /** Définition des 7 onglets de la sidebar */
-  const tabs = [{ key:"header",label:"En-tête",icon:"◆" },{ key:"format",label:"Format",icon:"⊞" },{ key:"entree",label:"Entrée",icon:"▶" },{ key:"steps",label:"Process",icon:"⚙" },{ key:"sortie",label:"Sortie",icon:"◀" },{ key:"export",label:"Export",icon:"↗" },{ key:"library",label:"Biblio",icon:"📚" }];
+  const tabs = [{ key:"header",label:"En-tête",icon:"◆" },{ key:"format",label:"Format",icon:"⊞" },{ key:"entree",label:"Entrée",icon:"▶" },{ key:"steps",label:"Process",icon:"⚙" },{ key:"sortie",label:"Sortie",icon:"◀" },{ key:"line",label:"Ligne",icon:"🏭" },{ key:"export",label:"Export",icon:"↗" },{ key:"library",label:"Biblio",icon:"📚" }];
 
   return (
     <div style={{ display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#212121",overflow:"hidden" }}>
@@ -638,8 +936,9 @@ ${xhtml}
               </div>
             )}
             {tab === "entree" && <BookendEditor data={data.entree} onChange={entree=>up(d=>{d.entree=entree;})} />}
-            {tab === "steps" && <StepsEditor steps={data.steps} onChange={steps=>up(d=>{d.steps=steps;})} />}
+            {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={steps=>up(d=>{d.steps=steps;})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
+            {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps} onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})} libDirHandle={libDirHandle} libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel, ouvrable dans Illustrator / Inkscape (QR codes inclus en natif)<br/>• <strong>PDF</strong> — Téléchargement direct</div>
