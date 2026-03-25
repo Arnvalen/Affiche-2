@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "setup:https": "node scripts/setup-cert.mjs",
     "electron:build": "vite build && electron .",
-    "dist:win": "vite build && electron-packager . \"Nexans Affiche\" --platform=win32 --arch=x64 --out=dist-electron --overwrite --ignore=\"node_modules|src|public|scripts|\\.cert|\\.git|dist-electron|dist$\" && powershell -Command \"Compress-Archive -Path 'dist-electron\\\\Nexans Affiche-win32-x64' -DestinationPath dist-electron\\\\NexansAffiche-win-x64.zip -Force\""
+    "dist:win": "vite build && electron-packager . \"Nexans Affiche\" --platform=win32 --arch=x64 --out=dist-electron --overwrite --ignore=\"node_modules|src|public|scripts|\\.cert|\\.git|dist-electron\" && powershell -Command \"Compress-Archive -Path 'dist-electron\\\\Nexans Affiche-win32-x64' -DestinationPath dist-electron\\\\NexansAffiche-win-x64.zip -Force\""
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
