@@ -6,6 +6,7 @@ import fs from 'fs'
 const hasCert = fs.existsSync('.cert/cert.pem') && fs.existsSync('.cert/key.pem')
 
 export default defineConfig({
+  base: './',
   plugins: hasCert ? [react()] : [react(), basicSsl()],
   server: {
     host: true,
