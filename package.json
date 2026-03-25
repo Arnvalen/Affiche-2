@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup:https": "node scripts/setup-cert.mjs"
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
@@ -16,7 +17,9 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "mkcert": "^3.2.0",
     "vite": "^6.0.0"
   }
 }

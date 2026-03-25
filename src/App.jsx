@@ -283,9 +283,9 @@ const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
  * L'attribut data-poster-root permet aux exports (SVG, PDF) de cibler cet élément.
  */
 const PosterPreview = ({ data }) => {
-  const fmt = FORMATS[data.format] || { w: data.customW, h: data.customH };
+  const fmt = data.format === "Personnalisé" ? { w: data.customW || 800, h: data.customH || 500 } : (FORMATS[data.format] || { w: 800, h: 500 });
   const posterW = Math.round(fmt.w * MM_PX), posterH = Math.round(fmt.h * MM_PX);
-  const s = data.fontScale || 1, qrSize = data.qrSize || 32;
+  const s = (data.fontScale || 7) * 0.15, qrSize = data.qrSize || 32;
   const isPortrait = fmt.h > fmt.w;
   const totalSteps = data.steps.length;
   const maxCols = data.maxCols > 0 ? data.maxCols : Math.min(totalSteps, isPortrait ? 3 : 4);
@@ -293,8 +293,8 @@ const PosterPreview = ({ data }) => {
 
   const bookendW = data.bookendWidth || 220;
 
-  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
-  const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"wrap",alignItems:"center" }}>{tags.map(t=><Tag key={t.id} type={t.type} scale={s} />)}</div>;
+  const renderTags = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"nowrap",alignItems:"center",flexShrink:0 }}>{tags.map(t=><TagWithQR key={t.id} tag={t} scale={s} qrSize={qrSize} />)}</div>;
+  const renderTagsPlain = (tags) => <div style={{ display:"flex",gap:3*s,flexWrap:"nowrap",alignItems:"center",flexShrink:0 }}>{tags.map(t=><Tag key={t.id} type={t.type} scale={s} />)}</div>;
 
   const getMachineInfo = (lineItemId) => {
     const item = (data.line||[]).find(m => m.id === lineItemId);
@@ -322,7 +322,7 @@ const PosterPreview = ({ data }) => {
             const pcMachineInfo = item.lineItemId ? getMachineInfo(item.lineItemId) : null;
             return (
               <div key={item.id} style={{ display:"flex",flexDirection:"row",alignItems:"center",padding:`${6*s}px ${8*s}px`,gap:6*s }}>
-                {pcMachineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:pcMachineInfo.color,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{pcMachineInfo.letter}</span>}
+                {pcMachineInfo && <span style={{ display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:pcMachineInfo.color,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{pcMachineInfo.letter}</span>}
                 <div style={{ flex:1,display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${4*s}px ${8*s}px`,background:"#E3F2FD",border:"2px solid #90CAF9",gap:6*s }}>
                   <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2*s,flex:1 }}>
                     <span style={{ fontSize:10*s,fontWeight:700,color:"#1565C0",textTransform:"uppercase",letterSpacing:1 }}>{item.name}</span>
@@ -337,7 +337,7 @@ const PosterPreview = ({ data }) => {
             const cc = machineInfo ? machineInfo.color : null;
             return (
               <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"row",alignItems:"center",gap:6*s }}>
-                {machineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:cc,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{machineInfo.letter}</span>}
+                {machineInfo && <span style={{ display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:cc,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{machineInfo.letter}</span>}
                 <div style={{ flex:1,fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
                 {item.tags.length > 0 && renderTagsPlain(item.tags)}
               </div>
@@ -507,52 +507,11 @@ const PosterPreview = ({ data }) => {
  * Sert aussi de référence pour la structure attendue du modèle de données.
  */
 const defaultData = () => ({
-  header: { reference: "37019", processName: "Extrusion mono-couche", subtitle: "Fil isolé coloré", logoDataUrl: null },
-  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false, bookendWidth: 220, headerHeight: 56, bgImageHeight: 25, showLineTags: true, lineZoneLabel: "number", pdfResolution: 3,
-  entree: { tags: [], sections: [
-    { id: uid(), title: "Matière", items: [
-      { id: uid(), name: "Fil de cuivre", tags: [{ id: uid(), type: "IC", url: "https://nexans.com/ic-cuivre" }, { id: uid(), type: "PC", url: "" }] },
-      { id: uid(), name: "HDPE", tags: [{ id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Colorants", tags: [{ id: uid(), type: "IC", url: "" }] },
-    ]},
-    { id: uid(), title: "Informations", items: [
-      { id: uid(), name: "OF / Planning", tags: [{ id: uid(), type: "SWI", url: "" }] },
-      { id: uid(), name: "Recette", tags: [{ id: uid(), type: "SWI", url: "https://nexans.com/swi-recette" }, { id: uid(), type: "IC", url: "" }] },
-    ]},
-  ]},
-  steps: [
-    { id: uid(), title: "Fil de cuivre nu", tags: [], operations: [
-      { id: uid(), name: "Dévidoir", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Soudure", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Redressage", tags: [{ id: uid(), type: "SWI", url: "" }] },
-      { id: uid(), name: "Préchauffeur", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }, { id: uid(), type: "PC", url: "" }] },
-    ]},
-    { id: uid(), title: "Extrusion", tags: [{ id: uid(), type: "SWI", url: "https://nexans.com/swi-extrusion" }, { id: uid(), type: "IC", url: "" }], operations: [
-      { id: uid(), name: "Alim. HDPE", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Alim. colorant", tags: [{ id: uid(), type: "SWI", url: "" }, { id: uid(), type: "IC", url: "" }] },
-      { id: uid(), isControlPoint: true, name: "Point de contrôle", description: "", tags: [] },
-      { id: uid(), name: "Dosage", tags: [{ id: uid(), type: "IC", url: "" }] },
-    ]},
-    { id: uid(), title: "Refroidissement", tags: [], operations: [
-      { id: uid(), name: "Contrôle qualité", tags: [{ id: uid(), type: "AQE", url: "" }] },
-      { id: uid(), isControlPoint: true, name: "Vérification", description: "", tags: [] },
-      { id: uid(), name: "Liste de contrôle", tags: [{ id: uid(), type: "LC", url: "" }] },
-    ]},
-  ],
-  sortie: { tags: [], sections: [
-    { id: uid(), title: "Matière", items: [
-      { id: uid(), name: "Fil isolé", tags: [{ id: uid(), type: "IC", url: "" }] },
-      { id: uid(), name: "Fil coloré", tags: [{ id: uid(), type: "IC", url: "" }] },
-    ]},
-    { id: uid(), title: "Informations", items: [
-      { id: uid(), name: "SAP / MES", tags: [{ id: uid(), type: "LC", url: "" }] },
-      { id: uid(), name: "Checklist", tags: [{ id: uid(), type: "LC", url: "" }] },
-      { id: uid(), name: "Carte bobine", tags: [{ id: uid(), type: "IC", url: "" }] },
-    ]},
-    { id: uid(), title: "Protocoles", items: [
-      { id: uid(), name: "Qualité", tags: [{ id: uid(), type: "LC", url: "" }, { id: uid(), type: "AQE", url: "" }] },
-    ]},
-  ]},
+  header: { reference: "", processName: "", subtitle: "", logoDataUrl: null },
+  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 7, qrSize: 32, forceFormat: false, bookendWidth: 220, headerHeight: 56, bgImageHeight: 25, showLineTags: true, lineZoneLabel: "number", pdfResolution: 3,
+  entree: { tags: [], sections: [] },
+  steps: [],
+  sortie: { tags: [], sections: [] },
   backgroundImage: null,
   icons: [],
   line: [],
@@ -748,6 +707,7 @@ export default function App() {
   const [libDirHandle, setLibDirHandle] = useState(null);
   const [libFiles, setLibFiles] = useState([]);
   const [libSvgFiles, setLibSvgFiles] = useState([]);
+  const [libExpanded, setLibExpanded] = useState({});
 
   /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
   const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
@@ -763,7 +723,13 @@ export default function App() {
   }, []);
 
   /** Export JSON : sérialise le state complet dans un fichier téléchargeable, ré-importable via importJSON. */
-  const exportJSON = () => { const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `affiche_${data.header.reference}.json`; a.click(); URL.revokeObjectURL(u); };
+  const exportJSON = () => {
+    const defaultName = data.header.reference ? `affiche_${data.header.reference}` : "affiche";
+    const name = prompt("Nom du fichier (sans extension) :", defaultName);
+    if (!name) return;
+    const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `${name}.json`; a.click(); URL.revokeObjectURL(u);
+  };
 
   /**
    * Export SVG : sérialise le DOM du poster via XMLSerializer (produit du XHTML valide),
@@ -793,12 +759,21 @@ ${xhtml}
   const exportPDF = async () => {
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
-    const fmt = FORMATS[data.format] || { w: data.customW, h: data.customH };
+    const fmt = data.format === "Personnalisé" ? { w: data.customW || 800, h: data.customH || 500 } : (FORMATS[data.format] || { w: 800, h: 500 });
     const dataUrl = await toPng(el, { pixelRatio: data.pdfResolution || 3 });
     const orientation = fmt.w > fmt.h ? "landscape" : "portrait";
     const doc = new jsPDF({ orientation, unit: "mm", format: [fmt.w, fmt.h] });
     doc.addImage(dataUrl, "PNG", 0, 0, fmt.w, fmt.h);
     doc.save(`affiche_${data.header.reference}.pdf`);
+  };
+  const exportPNG = async () => {
+    const el = document.querySelector("[data-poster-root]");
+    if (!el) return;
+    const dataUrl = await toPng(el, { pixelRatio: data.pdfResolution || 3 });
+    const a = document.createElement("a");
+    a.href = dataUrl;
+    a.download = `affiche_${data.header.reference}.png`;
+    a.click();
   };
   /** Import JSON : lit un fichier .json et remplace le state complet. */
   const importJSON = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { setData(JSON.parse(ev.target.result)); } catch { alert("JSON invalide"); } }; r.readAsText(f); };
@@ -839,8 +814,16 @@ ${xhtml}
   };
   const saveToLibrary = async () => {
     if (!libDirHandle) return;
-    const name = `affiche_${data.header.reference}.json`;
-    const fh = await libDirHandle.getFileHandle(name, { create: true });
+    const base = data.header.reference ? `affiche_${data.header.reference}` : "affiche";
+    const escaped = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const maxV = libFiles.reduce((max, f) => {
+      const m = f.match(new RegExp(`^${escaped}_(V(\\d+))\\.json$`, 'i'));
+      return m ? Math.max(max, parseInt(m[2])) : max;
+    }, 0);
+    const suggested = `${base}_V${maxV + 1}`;
+    const nameInput = prompt("Nom du fichier (sans extension) :", suggested);
+    if (!nameInput) return;
+    const fh = await libDirHandle.getFileHandle(`${nameInput}.json`, { create: true });
     const w = await fh.createWritable();
     await w.write(JSON.stringify(data, null, 2));
     await w.close();
@@ -921,19 +904,19 @@ ${xhtml}
                 </div>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
                   <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Taille polices</label>
-                  <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>0.5</span><input type="range" min="0.5" max="3" step="0.1" value={data.fontScale} onChange={e=>up(d=>{d.fontScale=parseFloat(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>3</span></div>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.fontScale.toFixed(1)}×</span><div style={{ display:"flex",gap:4 }}>{[0.7,1,1.3,1.5,2,2.5].map(v=><button key={v} onClick={()=>up(d=>{d.fontScale=v;})} style={{ padding:"3px 8px",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",border:Math.abs(data.fontScale-v)<0.05?"2px solid #C8102E":"1px solid #ddd",background:Math.abs(data.fontScale-v)<0.05?"#FFF5F5":"#fff",color:Math.abs(data.fontScale-v)<0.05?"#C8102E":"#888" }}>{v}×</button>)}</div></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>1</span><input type="range" min="1" max="20" step="1" value={data.fontScale} onChange={e=>up(d=>{d.fontScale=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>20</span></div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.fontScale}/20</span><div style={{ display:"flex",gap:4 }}>{[{l:"XS",v:3},{l:"S",v:5},{l:"M",v:7},{l:"L",v:10},{l:"XL",v:14},{l:"2XL",v:20}].map(({l,v})=><button key={v} onClick={()=>up(d=>{d.fontScale=v;})} style={{ padding:"3px 7px",borderRadius:4,fontSize:10,fontWeight:600,cursor:"pointer",border:data.fontScale===v?"2px solid #C8102E":"1px solid #ddd",background:data.fontScale===v?"#FFF5F5":"#fff",color:data.fontScale===v?"#C8102E":"#888" }}>{l}</button>)}</div></div>
                 </div>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
                   <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Taille QR codes</label>
                   <div style={{ fontSize:10,color:"#999",marginBottom:4 }}>Visible sur les tags ayant une URL. Cliquer un tag dans l'éditeur pour ajouter l'URL.</div>
                   <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontSize:10,color:"#888" }}>16</span><input type="range" min="16" max="80" step="4" value={data.qrSize} onChange={e=>up(d=>{d.qrSize=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>80</span></div>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.qrSize}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round(data.qrSize*data.fontScale)}px</span></div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.qrSize}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round(data.qrSize*(data.fontScale||7)*0.15)}px</span></div>
                 </div>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
                   <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Hauteur zone de titre</label>
                   <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>30</span><input type="range" min="30" max="120" step="2" value={data.headerHeight || 56} onChange={e=>up(d=>{d.headerHeight=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>120</span></div>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.headerHeight || 56}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round((data.headerHeight||56)*(data.fontScale||1))}px</span></div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.headerHeight || 56}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round((data.headerHeight||56)*(data.fontScale||7)*0.15)}px</span></div>
                 </div>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
                   <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Largeur entrée / sortie</label>
@@ -961,17 +944,20 @@ ${xhtml}
             {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps} onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})} libDirHandle={libDirHandle} libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel, ouvrable dans Illustrator / Inkscape (QR codes inclus en natif)<br/>• <strong>PDF</strong> — Téléchargement direct</div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel (Illustrator / Inkscape)<br/>• <strong>PNG</strong> — Image haute résolution<br/>• <strong>PDF</strong> — Document imprimable</div>
                 <Btn onClick={exportJSON}>↓ Exporter JSON</Btn>
                 <Btn onClick={exportSVG} color="#E87722">↓ Exporter SVG</Btn>
                 <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
-                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Résolution PDF</label>
+                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Résolution export (PNG / PDF)</label>
                   <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginTop:6 }}>
                     {[{v:1,l:"1× (96 DPI)"},{v:2,l:"2× (200 DPI)"},{v:3,l:"3× (300 DPI)"},{v:4,l:"4× (400 DPI)"}].map(r=><button key={r.v} onClick={()=>up(d=>{d.pdfResolution=r.v;})} style={{ padding:"5px 10px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:(data.pdfResolution||3)===r.v?"2px solid #1565C0":"1.5px solid #ddd",background:(data.pdfResolution||3)===r.v?"#E3F2FD":"#fff",color:(data.pdfResolution||3)===r.v?"#1565C0":"#666" }}>{r.l}</button>)}
                   </div>
-                  <div style={{ fontSize:10,color:"#999",marginTop:4 }}>Plus élevé = meilleure qualité, mais plus lent et plus lourd (attention aux grands formats).</div>
+                  <div style={{ fontSize:10,color:"#999",marginTop:4 }}>Plus élevé = meilleure qualité, mais plus lent (attention aux grands formats A0/A1).</div>
                 </div>
-                <Btn onClick={exportPDF} color="#1565C0">↓ Exporter PDF</Btn>
+                <div style={{ display:"flex",gap:8 }}>
+                  <Btn onClick={exportPNG} color="#2E7D32" style={{ flex:1 }}>↓ Exporter PNG</Btn>
+                  <Btn onClick={exportPDF} color="#1565C0" style={{ flex:1 }}>↓ Exporter PDF</Btn>
+                </div>
                 <div style={{ borderTop:"1px solid #e0e0e0",paddingTop:12 }}><label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Importer JSON</label><input ref={fileRef} type="file" accept=".json" onChange={importJSON} style={{ fontSize:11,marginTop:4 }} /></div>
                 <Btn outline color="#d32f2f" onClick={()=>{if(confirm("Réinitialiser ?"))setData(defaultData());}}>↺ Réinitialiser</Btn>
               </div>
@@ -993,13 +979,50 @@ ${xhtml}
                     <div style={{ fontSize:10,color:"#999",padding:"0 2px" }}>📂 {libDirHandle.name}/</div>
                     {libFiles.length === 0
                       ? <div style={{ fontSize:11,color:"#bbb",textAlign:"center",padding:20 }}>Aucun fichier JSON</div>
-                      : libFiles.map(name => (
-                        <div key={name} style={{ display:"flex",alignItems:"center",gap:6,background:"#fafafa",border:"1px solid #eee",borderRadius:5,padding:"6px 8px" }}>
-                          <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{name}</span>
-                          <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
-                          <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:12 }}>✕</span>
-                        </div>
-                      ))
+                      : (() => {
+                          const groups = {};
+                          libFiles.forEach(name => {
+                            const m = name.match(/^(.+)_(V\d+)\.json$/i);
+                            const base = m ? m[1] : name.replace(/\.json$/, '');
+                            if (!groups[base]) groups[base] = [];
+                            groups[base].push(name);
+                          });
+                          return Object.entries(groups).map(([base, files]) => {
+                            const isGroup = files.length > 1;
+                            const expanded = libExpanded[base] !== false;
+                            if (!isGroup) {
+                              const name = files[0];
+                              return (
+                                <div key={name} style={{ display:"flex",alignItems:"center",gap:6,background:"#fafafa",border:"1px solid #eee",borderRadius:5,padding:"6px 8px" }}>
+                                  <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>📄 {name.replace(/\.json$/,'')}</span>
+                                  <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
+                                  <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:13 }}>✕</span>
+                                </div>
+                              );
+                            }
+                            return (
+                              <div key={base} style={{ border:"1px solid #ddd",borderRadius:6,overflow:"hidden" }}>
+                                <div onClick={()=>setLibExpanded(e=>({...e,[base]:!expanded}))} style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:"#efefef",cursor:"pointer",userSelect:"none" }}>
+                                  <span style={{ fontSize:10,color:"#666" }}>{expanded?"▾":"▸"}</span>
+                                  <span style={{ flex:1,fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>📁 {base}</span>
+                                  <span style={{ fontSize:10,color:"#999",flexShrink:0 }}>{files.length} versions</span>
+                                </div>
+                                {expanded && files.map((name, i) => {
+                                  const vm = name.match(/_(V\d+)\.json$/i);
+                                  const label = vm ? vm[1] : name.replace(/\.json$/,'');
+                                  return (
+                                    <div key={name} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 18px",borderTop:"1px solid #eee",background:"#fafafa" }}>
+                                      <span style={{ fontSize:10,color:"#777",marginRight:2 }}>{i === files.length-1 ? "└" : "├"}</span>
+                                      <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
+                                      <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
+                                      <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:13 }}>✕</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          });
+                        })()
                     }
                   </>
                 )}
