@@ -10,7 +10,7 @@
   "customH": 500,
   "maxCols": 0,
   "fontScale": 0.9,
-  "qrSize": 52,
+  "qrSize": 48,
   "forceFormat": false,
   "bookendWidth": 140,
   "entree": {
@@ -92,7 +92,7 @@
   "steps": [
     {
       "id": "_175",
-      "title": "Pré-extrusion",
+      "title": "PRÉ-EXTRUSION",
       "tags": [
         {
           "id": "_100",
@@ -162,7 +162,7 @@
     },
     {
       "id": "_188",
-      "title": "Extrusion",
+      "title": "EXTRUSION",
       "tags": [
         {
           "id": "_189",
@@ -231,7 +231,7 @@
     },
     {
       "id": "_200",
-      "title": "Post-Extrusion",
+      "title": "POST-EXTRUSION",
       "tags": [
         {
           "id": "_121",
@@ -274,13 +274,13 @@
               "url": ""
             }
           ],
-          "lineItemId": "_129"
+          "lineItemId": "_103"
         },
         {
           "id": "_204",
           "name": "Bac froid",
           "tags": [],
-          "lineItemId": "_129"
+          "lineItemId": "_103"
         },
         {
           "id": "_114",
@@ -645,5 +645,8 @@
       "stepId": "_200"
     }
   ],
-  "pdfResolution": 3
+  "pdfResolution": 3,
+  "headerHeight": 76,
+  "showLineTags": false,
+  "lineZoneLabel": "title"
 }

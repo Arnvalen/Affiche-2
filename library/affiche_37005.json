@@ -579,11 +579,6 @@
       "stepId": "_188"
     },
     {
-      "id": "_127",
-      "iconId": "_109",
-      "stepId": "_188"
-    },
-    {
       "id": "_128",
       "iconId": "_117",
       "stepId": "_200"
@@ -609,11 +604,6 @@
       "stepId": "_200"
     },
     {
-      "id": "_123",
-      "iconId": "_113",
-      "stepId": "_175"
-    },
-    {
       "id": "_132",
       "iconId": "_119",
       "stepId": "_200"
@@ -624,10 +614,11 @@
       "stepId": "_200"
     },
     {
-      "id": "_124",
-      "iconId": "_115",
+      "id": "_104",
+      "iconId": "_117",
       "stepId": "_175"
     }
   ],
-  "pdfResolution": 4
+  "pdfResolution": 4,
+  "headerHeight": 90
 }

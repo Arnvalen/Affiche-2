@@ -322,7 +322,7 @@ const PosterPreview = ({ data }) => {
             const pcMachineInfo = item.lineItemId ? getMachineInfo(item.lineItemId) : null;
             return (
               <div key={item.id} style={{ display:"flex",flexDirection:"row",alignItems:"center",padding:`${6*s}px ${8*s}px`,gap:6*s }}>
-                {pcMachineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,borderRadius:"50%",border:`2.5px solid ${pcMachineInfo.color}`,background:pcMachineInfo.color+"18",color:pcMachineInfo.color,minWidth:24*s,height:24*s,flexShrink:0 }}>{pcMachineInfo.letter}</span>}
+                {pcMachineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:pcMachineInfo.color,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{pcMachineInfo.letter}</span>}
                 <div style={{ flex:1,display:"flex",flexDirection:"row",alignItems:"center",justifyContent:"center",borderRadius:4,padding:`${4*s}px ${8*s}px`,background:"#E3F2FD",border:"2px solid #90CAF9",gap:6*s }}>
                   <div style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:2*s,flex:1 }}>
                     <span style={{ fontSize:10*s,fontWeight:700,color:"#1565C0",textTransform:"uppercase",letterSpacing:1 }}>{item.name}</span>
@@ -337,7 +337,7 @@ const PosterPreview = ({ data }) => {
             const cc = machineInfo ? machineInfo.color : null;
             return (
               <div key={item.id} style={{ background:"#fafafa",border:"1px solid #eee",borderRadius:4,padding:`${6*s}px ${8*s}px`,display:"flex",flexDirection:"row",alignItems:"center",gap:6*s }}>
-                {machineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"'Courier New',monospace",fontSize:9*s,fontWeight:900,padding:`${2*s}px ${4*s}px`,borderRadius:"50%",border:`2.5px solid ${cc}`,background:cc+"18",color:cc,minWidth:24*s,height:24*s,flexShrink:0 }}>{machineInfo.letter}</span>}
+                {machineInfo && <span style={{ display:"inline-flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",fontSize:14*s,fontWeight:700,borderRadius:"50%",background:cc,color:"#fff",width:22*s,height:22*s,flexShrink:0 }}>{machineInfo.letter}</span>}
                 <div style={{ flex:1,fontSize:10*s,fontWeight:600,color:"#424242" }}>{item.name}</div>
                 {item.tags.length > 0 && renderTagsPlain(item.tags)}
               </div>
@@ -365,7 +365,7 @@ const PosterPreview = ({ data }) => {
         cells.push(<div key={`e${ci}`} style={{ flex:"1 1 0%",minWidth:0 }} />);
       }
     }
-    return <div key={ri} style={{ display:"flex",gap:0,width:"100%" }}>{cells}</div>;
+    return <div key={ri} style={{ display:"flex",gap:0,width:"100%",flex:1 }}>{cells}</div>;
   };
 
   const rowConn = <div style={{ display:"flex",alignItems:"center",justifyContent:"flex-end",padding:`${3*s}px 0`,color:"#E87722",paddingRight:8*s }}><svg width={16*s} height={16*s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 7v4H5.83l3.58-3.59L8 6l-6 6 6 6 1.41-1.41L5.83 13H21V7z"/></svg></div>;
@@ -379,20 +379,22 @@ const PosterPreview = ({ data }) => {
       {forceH && <div style={{ position:"absolute",top:4,right:4,background:"#C8102E",color:"#fff",fontSize:8*s,padding:`${1*s}px ${4*s}px`,borderRadius:3,fontWeight:700,opacity:0.7,zIndex:10 }}>FORMAT FIXE</div>}
 
       {/* Header */}
-      <div style={{ background:"#C8102E",color:"#fff",display:"flex",alignItems:"flex-start",padding:`0 ${24*s}px`,height:56*s,gap:20*s,flexShrink:0,paddingTop:4*s }}>
-        <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*s,display:"flex",flexDirection:"column",gap:2*s }}>
-          <span style={{ fontSize:8*s,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Référence</span>
-          <strong style={{ fontFamily:"monospace",fontSize:24*s,fontWeight:700 }}>{data.header.reference}</strong>
+      {(()=>{ const hh=(data.headerHeight||56), hr=hh/56, hs=s*hr; return (
+      <div style={{ background:"#C8102E",color:"#fff",display:"flex",alignItems:"flex-start",padding:`0 ${24*hs}px`,height:hh*s,gap:20*hs,flexShrink:0,paddingTop:4*hs }}>
+        <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*hs,display:"flex",flexDirection:"column",gap:2*hs }}>
+          <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Référence</span>
+          <strong style={{ fontFamily:"monospace",fontSize:24*hs,fontWeight:700 }}>{data.header.reference}</strong>
         </div>
-        <div style={{ flex:1,display:"flex",flexDirection:"column",gap:2*s }}>
-          <span style={{ fontSize:8*s,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Process</span>
-          <div style={{ fontSize:16*s,fontWeight:700 }}>{data.header.processName}</div>
-          <div style={{ fontSize:10*s,opacity:0.85 }}>{data.header.subtitle}</div>
+        <div style={{ flex:1,display:"flex",flexDirection:"column",gap:2*hs }}>
+          <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Process</span>
+          <div style={{ fontSize:16*hs,fontWeight:700 }}>{data.header.processName}</div>
+          <div style={{ fontSize:10*hs,opacity:0.85 }}>{data.header.subtitle}</div>
         </div>
-        {data.header.logoDataUrl ? <img src={data.header.logoDataUrl} alt="" style={{ height:40*s,objectFit:"contain" }} /> : (
-          <div style={{ textAlign:"right" }}><div style={{ fontSize:22*s,fontWeight:700,letterSpacing:2 }}>Nexans</div><div style={{ fontSize:7*s,textTransform:"uppercase",letterSpacing:2,opacity:0.7 }}>Electrify the future</div></div>
+        {data.header.logoDataUrl ? <img src={data.header.logoDataUrl} alt="" style={{ height:40*hs,objectFit:"contain" }} /> : (
+          <div style={{ textAlign:"right" }}><div style={{ fontSize:22*hs,fontWeight:700,letterSpacing:2 }}>Nexans</div><div style={{ fontSize:7*hs,textTransform:"uppercase",letterSpacing:2,opacity:0.7 }}>Electrify the future</div></div>
         )}
       </div>
+      );})()}
 
       {/* Legend */}
       <div style={{ display:"flex",alignItems:"center",gap:14*s,padding:`${6*s}px ${24*s}px`,background:"#fafafa",borderBottom:"1px solid #e0e0e0",fontSize:10*s,flexWrap:"wrap",flexShrink:0 }}>
@@ -405,7 +407,7 @@ const PosterPreview = ({ data }) => {
         <BookendPanel bookendData={data.entree} type="entree" s={s} qrSize={qrSize} width={bookendW} />
         <div style={arrowSt}><svg width={20*s} height={20*s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         <div style={{ flex:1,display:"flex",flexDirection:"column",gap:0,minWidth:0 }}>
-          {rows.map((rowSteps, ri) => <div key={ri}>{ri > 0 && rowConn}{renderRow(rowSteps, ri)}</div>)}
+          {rows.map((rowSteps, ri) => <div key={ri} style={{ display:"flex",flexDirection:"column",flex:1,minHeight:0 }}>{ri > 0 && rowConn}{renderRow(rowSteps, ri)}</div>)}
         </div>
         <div style={arrowSt}><svg width={20*s} height={20*s} viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
         <BookendPanel bookendData={data.sortie} type="sortie" s={s} qrSize={qrSize} width={bookendW} />
@@ -449,10 +451,11 @@ const PosterPreview = ({ data }) => {
                 )}
                 {/* Zone — numéro au-dessus du rectangle arrondi */}
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,gap:2*s}}>
-                  {/* Numéro centré au-dessus */}
-                  <div style={{width:12*s,height:12*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:6.5*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    {zone.stepIndex>=0?zone.stepIndex+1:"?"}
-                  </div>
+                  {/* Label de zone : numéro ou titre */}
+                  {(data.lineZoneLabel||"number")==="title"
+                    ? <div style={{fontSize:10*s,fontWeight:700,color:zone.color,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:zone.machines.length*80*s}}>{zone.step?.title||"?"}</div>
+                    : <div style={{width:22*s,height:22*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:14*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"monospace"}}>{zone.stepIndex>=0?zone.stepIndex+1:"?"}</div>
+                  }
                   {/* Rectangle arrondi */}
                   <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,border:`2px solid ${zone.color}`,borderRadius:6*s,background:zone.color+"18",padding:`${3*s}px ${6*s}px`}}>
                   {/* Machines */}
@@ -464,12 +467,12 @@ const PosterPreview = ({ data }) => {
                       const linkedOp=getLinkedOp(item.id);
                       return(
                         <Fragment key={item.id}>
-                          {mi>0&&<div style={{alignSelf:"stretch",display:"flex",alignItems:"center",flexShrink:0}}><span style={{color:zone.color,fontSize:14*s,fontWeight:900}}>→</span></div>}
+                          {mi>0&&<div style={{alignSelf:"stretch",display:"flex",alignItems:"center",flexShrink:0}}><svg width={16*s} height={16*s} viewBox="0 0 24 24" fill={zone.color} style={{display:"block"}}><path d="M8 5v14l11-7z"/></svg></div>}
                           <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s,flexShrink:0}}>
                             {/* Lettre + tags en dessous, centrés */}
                             <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s}}>
-                              <div style={{width:10*s,height:10*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:6*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{letter}</div>
-                              {linkedOp&&(linkedOp.tags||[]).length>0&&<div style={{display:"flex",gap:1*s,flexWrap:"wrap",justifyContent:"center"}}>{linkedOp.tags.map(t=><Tag key={t.id} type={t.type} scale={s*0.65} small />)}</div>}
+                              <div style={{width:22*s,height:22*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:14*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"monospace"}}>{letter}</div>
+                              {data.showLineTags!==false&&linkedOp&&(linkedOp.tags||[]).length>0&&<div style={{display:"flex",gap:1*s,flexWrap:"wrap",justifyContent:"center"}}>{linkedOp.tags.map(t=><Tag key={t.id} type={t.type} scale={s*0.65} small />)}</div>}
                             </div>
                             <SvgIcon svgData={icon.svgData} height={iconH*(item.size||1)} />
                             <span style={{fontSize:5.5*s,color:"#555",fontWeight:600,textAlign:"center",maxWidth:iconH*(item.size||1)*1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{icon.name}</span>
@@ -505,7 +508,7 @@ const PosterPreview = ({ data }) => {
  */
 const defaultData = () => ({
   header: { reference: "37019", processName: "Extrusion mono-couche", subtitle: "Fil isolé coloré", logoDataUrl: null },
-  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false, bookendWidth: 220, bgImageHeight: 25, pdfResolution: 3,
+  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 1, qrSize: 32, forceFormat: false, bookendWidth: 220, headerHeight: 56, bgImageHeight: 25, showLineTags: true, lineZoneLabel: "number", pdfResolution: 3,
   entree: { tags: [], sections: [
     { id: uid(), title: "Matière", items: [
       { id: uid(), name: "Fil de cuivre", tags: [{ id: uid(), type: "IC", url: "https://nexans.com/ic-cuivre" }, { id: uid(), type: "PC", url: "" }] },
@@ -928,10 +931,27 @@ ${xhtml}
                   <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.qrSize}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round(data.qrSize*data.fontScale)}px</span></div>
                 </div>
                 <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Hauteur zone de titre</label>
+                  <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>30</span><input type="range" min="30" max="120" step="2" value={data.headerHeight || 56} onChange={e=>up(d=>{d.headerHeight=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>120</span></div>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.headerHeight || 56}px</span><span style={{ fontSize:10,color:"#999" }}>Rendu : {Math.round((data.headerHeight||56)*(data.fontScale||1))}px</span></div>
+                </div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
                   <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Largeur entrée / sortie</label>
                   <div style={{ fontSize:10,color:"#999",marginBottom:4 }}>Contrôle la largeur fixe des panneaux entrée et sortie.</div>
                   <div style={{ display:"flex",alignItems:"center",gap:10 }}><span style={{ fontSize:10,color:"#888" }}>10</span><input type="range" min="10" max="420" step="10" value={data.bookendWidth || 220} onChange={e=>up(d=>{d.bookendWidth=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>420</span></div>
                   <div style={{ display:"flex",justifyContent:"space-between",marginTop:4 }}><span style={{ fontSize:12,fontWeight:700,color:"#C8102E" }}>{data.bookendWidth || 220}px</span></div>
+                </div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
+                  <label style={{ display:"flex",alignItems:"center",gap:8,cursor:"pointer" }}>
+                    <input type="checkbox" checked={data.showLineTags!==false} onChange={e=>up(d=>{d.showLineTags=e.target.checked;})} style={{ accentColor:"#C8102E",width:16,height:16 }} />
+                    <span style={{ fontSize:11,fontWeight:600,color:"#666" }}>Afficher les tags sur la ligne de production</span>
+                  </label>
+                </div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Label des zones (ligne de prod.)</label>
+                  <div style={{ display:"flex",gap:6,marginTop:6 }}>
+                    {[["number","Numéros"],["title","Titres"]].map(([v,l])=><button key={v} onClick={()=>up(d=>{d.lineZoneLabel=v;})} style={{ padding:"5px 12px",borderRadius:5,fontSize:12,fontWeight:600,cursor:"pointer",border:(data.lineZoneLabel||"number")===v?"2px solid #C8102E":"1.5px solid #ddd",background:(data.lineZoneLabel||"number")===v?"#FFF5F5":"#fff",color:(data.lineZoneLabel||"number")===v?"#C8102E":"#666" }}>{l}</button>)}
+                  </div>
                 </div>
               </div>
             )}
