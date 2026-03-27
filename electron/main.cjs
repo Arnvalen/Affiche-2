@@ -201,7 +201,7 @@ function createWindow(port) {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
-    backgroundColor: '#C8102E',
+    backgroundColor: '#ffffff',
     show: false,
     title: "Nexans \u2014 \u00c9diteur d'affiche",
     webPreferences: { nodeIntegration: false, contextIsolation: true }
@@ -210,9 +210,36 @@ function createWindow(port) {
   log('T4 BrowserWindow created (+' + (Date.now() - T0) + 'ms)')
 
   // Splash pendant le chargement
-  win.loadURL('data:text/html,' + encodeURIComponent(
-    '<body style="background:#C8102E;color:white;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;font-size:24px">Chargement\u2026</body>'
-  ))
+  const logoB64 = fs.readFileSync(path.join(__dirname, 'nexans-logo.png')).toString('base64')
+  const splashHTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
+  height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  overflow:hidden;user-select:none}
+.logo{width:260px;opacity:0;animation:fadeIn .5s ease-out .1s forwards}
+.title{font-size:13px;font-weight:300;letter-spacing:3px;text-transform:uppercase;
+  margin-top:24px;margin-bottom:52px;color:#888;opacity:0;animation:fadeIn .5s ease-out .4s forwards}
+.bar-wrap{width:200px;height:2px;background:#eee;border-radius:1px;
+  overflow:hidden;opacity:0;animation:fadeIn .4s ease-out .6s forwards}
+.bar{width:40%;height:100%;background:#C8102E;border-radius:1px;
+  animation:slide 1.4s ease-in-out infinite}
+.credits{position:absolute;bottom:24px;text-align:center;font-size:10px;
+  letter-spacing:.3px;line-height:1.9;color:#bbb;opacity:0;
+  animation:fadeIn .5s ease-out .8s forwards}
+.credits b{color:#999;font-weight:500}
+.version{position:absolute;top:14px;right:18px;font-size:10px;
+  color:#ddd;opacity:0;animation:fadeIn .5s ease-out 1s forwards}
+@keyframes fadeIn{to{opacity:1}}
+@keyframes slide{0%{transform:translateX(-100%)}50%{transform:translateX(250%)}100%{transform:translateX(-100%)}}
+</style></head><body>
+<img class="logo" src="data:image/png;base64,${logoB64}">
+<div class="title">\u00c9diteur d\u2019affiche \u2014 Ligne de production</div>
+<div class="bar-wrap"><div class="bar"></div></div>
+<div class="credits">D\u00e9velopp\u00e9 par <b>Arnaud Valente Jacot-Descombes</b><br>D\u00e9partement Quality Management \u2014 Nexans</div>
+<div class="version">v${app.getVersion()}</div>
+</body></html>`
+  win.loadURL('data:text/html,' + encodeURIComponent(splashHTML))
   win.show()
 
   // Events d'instrumentation
@@ -223,9 +250,14 @@ function createWindow(port) {
   win.webContents.on('console-message', (_e, _lv, msg) => log('CONSOLE: ' + msg))
   win.webContents.on('render-process-gone', (_e, details) => log('RENDERER CRASH: ' + JSON.stringify(details)))
 
-  // Charger l'app
-  log('T5 loadURL http://127.0.0.1:' + port + '/ (+' + (Date.now() - T0) + 'ms)')
-  win.loadURL(`http://127.0.0.1:${port}/`)
+  // Charger l'app après 5s minimum de splash
+  const MIN_SPLASH_MS = 5000
+  const delay = Math.max(0, MIN_SPLASH_MS - (Date.now() - T0))
+  log('T5 app ready, chargement dans ' + delay + 'ms')
+  setTimeout(() => {
+    log('T5 loadURL http://127.0.0.1:' + port + '/ (+' + (Date.now() - T0) + 'ms)')
+    win.loadURL(`http://127.0.0.1:${port}/`)
+  }, delay)
   return win
 }
 

@@ -19,6 +19,7 @@ if exist "%VERSION_FILE%" (
 :: Copier si pas a jour
 if not "%LOCAL_VER%"=="%VERSION%" (
     echo Installation Nexans Affiche v%VERSION%...
+    taskkill /F /IM "Nexans Affiche.exe" >nul 2>&1
     if exist "%LOCAL%" rmdir /s /q "%LOCAL%" >nul 2>&1
     mkdir "%LOCAL%" >nul 2>&1
     xcopy /s /e /i /q /y "%SRC%" "%LOCAL%\app" >nul
