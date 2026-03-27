@@ -318,5 +318,8 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit()
+  if (process.platform !== 'darwin') {
+    log('window-all-closed → exit')
+    app.exit(0)
+  }
 })
