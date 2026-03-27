@@ -20,9 +20,11 @@ app.setAppLogsPath(path.join(LOCAL, 'logs'))
 
 /* ═══ Logging vers fichier ═══ */
 const LOG_FILE = path.join(path.dirname(process.execPath), 'affiche-debug.log')
+let SHARED_LOG = null  // initialisé après résolution de LIBRARY
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
   try { fs.appendFileSync(LOG_FILE, line) } catch (_) {}
+  if (SHARED_LOG) try { fs.appendFileSync(SHARED_LOG, line) } catch (_) {}
 }
 process.on('uncaughtException', (e) => { log('FATAL: ' + e.stack); app.quit() })
 
@@ -51,6 +53,20 @@ if (LIBRARY && !fs.existsSync(LIBRARY)) {
   try { fs.mkdirSync(LIBRARY, { recursive: true }) } catch (_) {}
 }
 log('LIBRARY: ' + (LIBRARY || 'none'))
+
+/* ═══ Log partagé sur le lecteur réseau ═══ */
+if (LIBRARY) {
+  try {
+    const logsDir = path.join(LIBRARY, '..', 'logs')
+    if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true })
+    const user = (process.env.USERNAME || process.env.USER || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '_')
+    const date = new Date().toISOString().slice(0, 10)
+    SHARED_LOG = path.join(logsDir, `affiche_${user}_${date}.log`)
+    log('SHARED_LOG: ' + SHARED_LOG)
+  } catch (e) {
+    log('SHARED_LOG init failed: ' + e.message)
+  }
+}
 
 /* ═══ Pré-chargement des fichiers dist/ en RAM ═══ */
 const FILE_CACHE = {}
