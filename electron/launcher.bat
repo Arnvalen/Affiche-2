@@ -25,11 +25,9 @@ if not "%LOCAL_VER%"=="%VERSION%" (
     xcopy /s /e /i /q /y "%SRC%" "%LOCAL%\app" >nul
     echo %VERSION%> "%VERSION_FILE%"
     echo Installation terminee.
+    echo  Demarrage de l'application en cours, veuillez patienter...
 )
 
 set ELECTRON_RUN_AS_NODE=
 start "" "%LOCAL%\app\Nexans Affiche.exe" "--library=%LIBRARY%"
-echo.
-echo  Demarrage de l'application en cours, veuillez patienter...
-echo.
 endlocal
