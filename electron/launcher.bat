@@ -29,4 +29,7 @@ if not "%LOCAL_VER%"=="%VERSION%" (
 
 set ELECTRON_RUN_AS_NODE=
 start "" "%LOCAL%\app\Nexans Affiche.exe" "--library=%LIBRARY%"
+echo.
+echo  Demarrage de l'application en cours, veuillez patienter...
+echo.
 endlocal
