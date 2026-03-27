@@ -295,6 +295,10 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
   win.webContents.on('console-message', (_e, _lv, msg) => log('CONSOLE: ' + msg))
   win.webContents.on('render-process-gone', (_e, details) => log('RENDERER CRASH: ' + JSON.stringify(details)))
 
+  // Fix clavier : après confirm() ou perte de focus, Electron peut garder le focus
+  // sur le frame natif sans le transmettre au renderer → clavier muet.
+  win.on('focus', () => { win.webContents.focus() })
+
   // Fallback : si le splash ne charge pas en 20s (renderer bloqué), forcer l'app
   setTimeout(() => {
     if (phase === 'SPLASH_LOADING') {
