@@ -245,17 +245,36 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
   // Events d'instrumentation
   win.webContents.on('did-start-loading', () => log('T6 did-start-loading (+' + (Date.now() - T0) + 'ms)'))
   win.webContents.on('dom-ready', () => log('T7 dom-ready (+' + (Date.now() - T0) + 'ms)'))
-  win.webContents.on('did-finish-load', () => log('T8 did-finish-load (+' + (Date.now() - T0) + 'ms)'))
+  let appLoading = false
+  win.webContents.on('did-finish-load', () => {
+    log('T8 did-finish-load (+' + (Date.now() - T0) + 'ms)')
+    if (appLoading) {
+      // Fade-in de l'app après chargement
+      win.webContents.executeJavaScript('document.body.style.opacity="1"').catch(() => {})
+    }
+  })
   win.webContents.on('did-fail-load', (_e, code, desc, url) => log('LOAD FAIL: ' + code + ' ' + desc + ' url=' + url))
   win.webContents.on('console-message', (_e, _lv, msg) => log('CONSOLE: ' + msg))
   win.webContents.on('render-process-gone', (_e, details) => log('RENDERER CRASH: ' + JSON.stringify(details)))
 
-  // Charger l'app après 5s minimum de splash
+  // Charger l'app après 5s minimum de splash, avec fondu
   const MIN_SPLASH_MS = 5000
-  const delay = Math.max(0, MIN_SPLASH_MS - (Date.now() - T0))
-  log('T5 app ready, chargement dans ' + delay + 'ms')
+  const FADE_MS = 600
+  const delay = Math.max(FADE_MS, MIN_SPLASH_MS - (Date.now() - T0))
+  log('T5 splash, chargement dans ' + delay + 'ms')
+
+  // Fade-out du splash 600ms avant la navigation
+  setTimeout(() => {
+    win.webContents.executeJavaScript(
+      'document.body.style.cssText+="transition:opacity .6s ease;opacity:0"'
+    ).catch(() => {})
+  }, delay - FADE_MS)
+
+  // Navigation vers l'app après le fondu
   setTimeout(() => {
     log('T5 loadURL http://127.0.0.1:' + port + '/ (+' + (Date.now() - T0) + 'ms)')
+    appLoading = true
+    win.webContents.insertCSS('body{opacity:0!important;transition:opacity .6s ease .1s}').catch(() => {})
     win.loadURL(`http://127.0.0.1:${port}/`)
   }, delay)
   return win
