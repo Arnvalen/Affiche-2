@@ -44,7 +44,7 @@ const MM_PX = 1.4;
 const ZONE_COLORS = ["#1565C0","#00838F","#E65100","#6A1B9A","#AD1457","#F57F17","#4E342E","#37474F"];
 
 /** Générateur d'IDs uniques pour les éléments du modèle de données */
-let _id = 100; const uid = () => `_${_id++}`;
+let _id = 120; const uid = () => `_${_id++}`;
 
 /** Supprime width/height fixes du SVG root et force width:100%;height:100% pour qu'il remplisse son conteneur sans déformation. */
 /** Convertit un SVG texte en data URL pour utilisation dans <img>. Le navigateur gère le scaling nativement (height fixe + width:auto = ratio conservé). */
@@ -282,7 +282,7 @@ const BookendPanel = ({ bookendData, type, s, qrSize, width }) => {
  * Le contenu principal est horizontal : Entrée | › | Grille d'étapes | › | Sortie.
  * L'attribut data-poster-root permet aux exports (SVG, PDF) de cibler cet élément.
  */
-const PosterPreview = ({ data }) => {
+const PosterPreview = ({ data, appVersion }) => {
   const fmt = data.format === "Personnalisé" ? { w: data.customW || 800, h: data.customH || 500 } : (FORMATS[data.format] || { w: 800, h: 500 });
   const posterW = Math.round(fmt.w * MM_PX), posterH = Math.round(fmt.h * MM_PX);
   const s = (data.fontScale || 7) * 0.15, qrSize = data.qrSize || 32;
@@ -491,7 +491,7 @@ const PosterPreview = ({ data }) => {
 
       {/* Footer */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:"#212121",color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
-        <span><strong style={{ color:"#fff" }}>Version :</strong> 1.0</span>
+        <span><strong style={{ color:"#fff" }}>Version :</strong> {data.version || '—'}</span>
         <span><strong style={{ color:"#fff" }}>Format :</strong> {data.format} · {fmt.w}×{fmt.h}mm · {maxCols} col · Police {s.toFixed(1)}×</span>
         <span><strong style={{ color:"#fff" }}>Ligne :</strong> {data.header.processName}</span>
       </div>
@@ -506,6 +506,15 @@ const PosterPreview = ({ data }) => {
  * Retourne un nouvel objet à chaque appel (IDs uniques via uid()).
  * Sert aussi de référence pour la structure attendue du modèle de données.
  */
+const emptyData = () => ({
+  header: { reference: "", processName: "", subtitle: "", logoDataUrl: "" },
+  format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 7, qrSize: 32, forceFormat: false,
+  bookendWidth: 220, headerHeight: 56, bgImageHeight: 25, showLineTags: true, lineZoneLabel: "number", pdfResolution: 3,
+  entree: { tags: [], sections: [] },
+  sortie: { tags: [], sections: [] },
+  steps: [], backgroundImage: "", icons: [], line: [], version: "",
+});
+
 const defaultData = () => ({
   header: { reference: "", processName: "", subtitle: "", logoDataUrl: "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiPz4KPHN2ZyBpZD0iQ2FscXVlXzEiIGRhdGEtbmFtZT0iQ2FscXVlIDEiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgdmlld0JveD0iMCAwIDY4OC40MyAyODMuNDQiPgogIDxkZWZzPgogICAgPHN0eWxlPgogICAgICAuY2xzLTEgewogICAgICAgIGZpbGw6ICMwMTAxMDE7CiAgICAgIH0KCiAgICAgIC5jbHMtMiB7CiAgICAgICAgZmlsbDogI0ZGMTkxMDsKICAgICAgfQogICAgPC9zdHlsZT4KICA8L2RlZnM+CiAgPHBhdGggY2xhc3M9ImNscy0yIiBkPSJNMjk5LjM5LDQuMTdzLTEwLjktNC4xNy0yNS42NS00LjE3Yy0yNi43MywwLTQwLjc5LDE0LjU5LTQ3LjYyLDIzLjk4LTYuNDYsOC44OC0xMC41MywxOC4xMy0xMy41OSwzMC45Mi0yLjkzLDEyLjIzLTMuNDEsMjcuNTItMy45MiwzOS43Mi0xLjI3LDMwLjYzLDEuNiw4NC41My0xMS42MSw4NC41My02Ljc4LDAtMTEuNDItMTAuNDMtMTIuOTktMTQuNDQtLjY0LTEuNjMtNS44LTE2LjYzLTEyLjE5LTQ0Ljk4LTMuOTctMTcuNjYtMTMuNDItNjAuMjEtMTYuMTYtNjkuNzgtMS4yNi00LjQxLTQuNDctMTYuMS0xMC42OS0yNi4yNC04LjE2LTEzLjI5LTIyLjA2LTE5Ljk5LTM0LjEzLTE5Ljk5cy0yMi41NSw4LjA4LTI2LjUyLDExLjk5Yy0xMi4xMSwxMS45My0xNi4wNywyOS4zNC0xNy4zNCwzNi4yNi0xLjM4LDcuNDctMy4wNywyMy4wNy0zLjA3LDIzLjA3LTIuNDMsMTguNi02LjQ5LDUwLjgzLTcuNDEsNTcuNTktNC43NCwzNC43Ni0xNC42NCw0MC4zNy0yNC4xNyw0My40Ny0yLjI0LC43My02LjUzLDEuMDYtOC4wMSwxLjA2LTYuMjEsMC0xMS4xMi0xLjgtMTEuMTItMS44LS42Ny0uMjctMS45Mi0uNzYtMy4zOC0uNzYtLjg1LDAtMS42NiwuMTYtMi40MSwuNDktMi4wMSwuODgtMi45MiwyLjA4LTMuMjMsMi42NC0zLjg4LDUuOTctNC4xOCwxMi4zNy00LjE4LDE0LjE5LDAsNC4zOSwyLjY4LDUuODYsMy40OCw2LjIsLjI0LC4xLDUuNzQsMi40NSwxMy44NiwzLjcsMjQuMzcsMy43OCwzOS42Mi0xMC41Nyw0My43NS0xNC41OSwzLjg4LTMuNzksMTAuNTktMTEuNTksMTUtMjYuODMsMi44Mi05LjcyLDQuNDYtMTkuMjYsNS43MS0yOS44NSwuOTQtNy45OSw3LjA3LTYwLjkxLDguMzItNjguMzIsMS4zMi03LjgsMy4zMi0xNS44OSw3LjE4LTIzLjMsMi43Mi01LjIzLDcuMzgtMTAuODMsMTQuMjctMTAuODMsMi42NSwwLDUuMDgsLjgsNy4yMiwyLjQsNi42LDQuODksMTAuNTUsMTYuNDQsMTEuODUsMjEuNDMsMS43Niw2LjcxLDE0LjM2LDU5LjcsMTYuMzYsNjguOTMsMTMuNDIsNjIuMTMsMjIuNDYsNzIuOSwzNC45Nyw3OS4xMyw3LjE2LDMuNTYsMjEuMjIsNy41MywzMy45OC0yLjU0LDE0LjMxLTExLjI4LDE0LjY5LTMzLjMyLDE1LjY2LTQ2LjY5LDEtMTMuNzgsMS4wNC0yNC44MSwxLjExLTI5Ljc2LC42OC00OS4yLDEuMDktNjQuMzUsMTQuMjItODMuMzMsNy4wNy0xMC4yMSwyMS41Ny0xNy40Myw0NS42LTkuOTksLjU5LC4xOSwxLjg4LC41LDIuOTUsLjUsNC42NiwwLDYuNi00LjczLDcuODEtOS40NCwuODItMy4xOCwzLjA4LTEyLjMzLTMuOTItMTQuNiIvPgogIDxnPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMjc3LjM4LDE2My4xM2MwLDcuNzcsMS4zMywxMi44OCwzLjc5LDE2LjI5LDMuMjIsNC4xNyw4LjE1LDYuNDQsMTQuNTgsNi40NCw3LjIsMCwxNC4wMi0yLjA4LDIwLjQ3LTQuOTIsMS4zMi0uNTcsMi42NS0uOTUsMy45Ny0uOTUsNC43NCwwLDkuMjgsMy45OCw5LjI4LDguOSwwLDMuNjEtMS41MSw2LjgyLTQuOTIsOC41My05LjEsNC4zNS0xOC43NSw2LjQ0LTI4LjgsNi40NC0xMC45OCwwLTIwLjQ1LTMuNi0yNy40Ni0xMC42MS02LjgyLTYuODItMTAuNDItMTYuMjktMTAuNDItMjcuNDZ2LTIzLjg3YzAtMTAuOTksMy42LTIwLjQ2LDEwLjQyLTI3LjI4LDcuMDEtNy4wMSwxNi40OC0xMC42MSwyNy40Ni0xMC42MXMyMC42NSwzLjYsMjcuNDcsMTAuNjFjNi44Miw2LjgyLDEwLjYsMTYuMjksMTAuNiwyNy4yOHY4LjljMCw2LjgyLTUuNDksMTIuMzItMTIuMzEsMTIuMzJoLTQ0LjEzWm0zNi45NC0xOGMwLTE1LjcyLTYuNDQtMjMuMTEtMTguNTctMjMuMTFzLTE4LjM3LDcuMTktMTguMzcsMjMuMTFoMzYuOTRaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0zODMuMjIsMTcwLjE0bC0yMC4wOCwyOS41NWMtMS45LDIuNjYtNC45Miw0LjE3LTcuOTYsNC4xNy01LjExLDAtOS44NS00LjM1LTkuODUtOS44NSwwLTEuODksLjU4LTMuNzgsMS43MS01LjQ5bDI0LjgyLTM1LjA1LTI0LjI1LTM0LjA5Yy0xLjE0LTEuNzEtMS43LTMuNi0xLjctNS41LDAtNS4xMSw0LjM1LTkuODQsOS44NS05Ljg0LDMuMDMsMCw2LjA2LDEuNTEsNy45NSw0LjE2bDE5LjUxLDI4LjYsMTkuNTEtMjguNmMxLjg5LTIuODQsNS4xMS00LjE2LDguMTUtNC4xNiw1LjMsMCw5LjY2LDQuMzUsOS42Niw5Ljg0LDAsMS45LS41OCwzLjc5LTEuNzEsNS41bC0yNC4yNCwzNC4wOSwyNC44MSwzNS4wNWMxLjMzLDEuNzEsMS45LDMuNiwxLjksNS40OSwwLDUuMy00LjU1LDkuODUtMTAuMDQsOS44NS0zLjAzLDAtNi4wNi0xLjMyLTcuOTUtNC4xN2wtMjAuMDktMjkuNTVaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik01MDcuMDUsMTg3LjM4YzAsNS4zLTMuNDEsOS44NS04LjMzLDExLjU2LTkuMjksMy4yMi0yMC4wOSw0LjkyLTMwLjY5LDQuOTItMTEuNTYsMC0yMC42NS0yLjg0LTI3LjA5LTguMzMtNi40NC01LjUtOS44NS0xMy4yNi05Ljg1LTIyLjU0czMuNDEtMTYuNDgsOS44NS0yMS43OGM2LjQ0LTUuNDksMTUuNTMtOC4zNCwyNy4wOS04LjM0aDE5LjUxdi02LjYzYzAtNy45NS01Ljg3LTE0LjIxLTE1LjcyLTE0LjIxLTguOSwwLTEzLjgyLDEuMTQtMjAuNDYsNS4xMS0xLjUyLC45NS0zLjYsMS43LTUuMywxLjctNS4xMSwwLTkuMjgtMy43OS05LjI4LTguNTMsMC0zLjQxLDEuNTEtNi44MSw0LjczLTguNzEsMTAuMjMtNS44OCwxOS4xMy03LjU4LDMyLjc3LTcuNTgsMjEuMjIsMCwzMi43NywxNS4zNSwzMi43NywzMi4yMXY1MS4xNFptLTE5LjUxLTI2LjUyaC0xOS41MWMtMTYuNDgsMC0xNy40Myw4LjkxLTE3LjQzLDEyLjEzLDAsMy40MSwuOTUsMTIuODgsMTcuNDMsMTIuODgsNi40NCwwLDEzLjQ1LS45NSwxOS41MS0yLjQ2di0yMi41NVoiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTU4NS4yNCwxNDAuNGMwLTExLjU1LTYuODItMTguMzctMTguNTYtMTguMzctNi4yNSwwLTEyLjUsLjk0LTE4LjM3LDIuNDZ2NjkuNTJjMCw1LjUtNC4zNiw5Ljg1LTkuNjYsOS44NXMtOS44NS00LjM1LTkuODUtOS44NVYxMjAuNTJjMC01LjMxLDMuMjItOS44NSw4LjMzLTExLjU2LDkuMjktMy4yMSwxOS4zMi00LjkyLDI5LjU1LTQuOTIsMTEuMTgsMCwyMC42NSwzLjYsMjcuNDcsMTAuNjEsNi44Miw2LjgyLDEwLjYsMTYuMjksMTAuNiwyNy4yOHY1Mi4wOWMwLDUuNS00LjM2LDkuODUtOS44NSw5Ljg1cy05LjY2LTQuMzUtOS42Ni05Ljg1di01My42MVoiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTY0MC42OSwxNTguNTljLTEwLjIzLTMuNzktMTguMTktMTEuNzUtMTguMTktMjUuOTUsMC0xNi42NywxMy44My0yOC42MSwzMi43Ny0yOC42MSwxMi44OCwwLDE5LjUxLDEuOSwyNS43Niw0Ljc0LDMuNzksMS41Miw2LjI1LDQuOTIsNi4yNSw4LjkxLDAsNC45Mi0zLjk4LDkuMDktOS4wOSw5LjA5LTEuMzMsMC0zLjIyLS4zOC00LjU1LS45NS00LjczLTIuMjctMTIuNS0zLjc5LTE4Ljc1LTMuNzktNy43NywwLTEyLjg4LDMuNzktMTIuODgsMTAuMjMsMCw0LjkyLDMuNzgsNy45NSw3Ljc2LDkuMjhsMTguNTcsNi4wN2MxMi41LDQuMTYsMjAuMDgsMTIuNjksMjAuMDgsMjYuNTEsMCwxNi42Ny0xMy40NSwyOS43NC0zMy43MiwyOS43NC0xMS4xOCwwLTIwLjI3LTIuMDgtMjcuMjgtNS4zLTMuNTktMS43MS01Ljg3LTQuOTMtNS44Ny04LjcyLDAtNC45Miw0LjE3LTkuNDcsOS40Ny05LjQ3LDEuMzMsMCwzLjAzLC41Nyw0LjM2LDEuMTQsNS4xMiwyLjY1LDExLjM3LDQuMzUsMTkuNyw0LjM1LDkuMSwwLDEzLjgzLTMuNDEsMTMuODMtOS44NSwwLTcuMDEtNS42OC05LjI4LTEyLjY5LTExLjc0bC0xNS41My01LjY4WiIvPgogIDwvZz4KICA8Zz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTExNi4xOCwyODIuODdjLS45OSwwLTEuODYtLjM1LTIuNTktMS4wNS0uNzQtLjcxLTEuMTEtMS41Ny0xLjExLTIuNnYtMzIuNjZjMC0uOTksLjM2LTEuODQsMS4wOC0yLjU3LC43Mi0uNzIsMS42LTEuMDgsMi42Mi0xLjA4aDE2LjU0Yy44MywwLDEuNTMsLjI4LDIuMTEsLjg1LC41NywuNTcsLjg1LDEuMjgsLjg1LDIuMTFzLS4yOCwxLjQ3LS44NSwyYy0uNTgsLjUzLTEuMjgsLjgtMi4xMSwuOGgtMTQuMnYxMC42MWgxMy40NmMuODQsMCwxLjU0LC4yNywyLjExLC44MywuNTcsLjU1LC44NiwxLjI0LC44NiwyLjA4LDAsLjgtLjI5LDEuNDctLjg2LDIuMDItLjU3LC41NS0xLjI3LC44My0yLjExLC44M2gtMTMuNDZ2MTIuMDloMTQuNmMuOCwwLDEuNDksLjI3LDIuMDgsLjgyLC41OSwuNTUsLjg4LDEuMjMsLjg4LDIuMDIsMCwuODQtLjI5LDEuNTMtLjg4LDIuMDgtLjU5LC41NS0xLjI5LC44My0yLjA4LC44M2gtMTYuOTNaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0xNDYuNjgsMjgyLjg3Yy0xLjAzLDAtMS45LS4zNy0yLjYyLTEuMTEtLjcyLS43NC0xLjA4LTEuNi0xLjA4LTIuNTl2LTMzLjgxYzAtLjg0LC4zLTEuNTQsLjkxLTIuMTQsLjYxLS41OSwxLjMxLS44OSwyLjExLS44OXMxLjU0LC4zMSwyLjE0LC45MmMuNTgsLjYxLC44OCwxLjMzLC44OCwyLjE2djMxLjdoMTQuNmMuODQsMCwxLjU0LC4yNywyLjExLC44MiwuNTcsLjU1LC44NiwxLjIzLC44NiwyLjAyLDAsLjg0LS4yOCwxLjUzLS44MywyLjA4LS41NSwuNTUtMS4yNSwuODMtMi4wOSwuODNoLTE2Ljk4WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMTc2LjE1LDI4Mi44N2MtLjk5LDAtMS44Ni0uMzUtMi41OS0xLjA1LS43NC0uNzEtMS4xMS0xLjU3LTEuMTEtMi42di0zMi42NmMwLS45OSwuMzYtMS44NCwxLjA4LTIuNTcsLjcyLS43MiwxLjYtMS4wOCwyLjYyLTEuMDhoMTYuNTRjLjgzLDAsMS41MywuMjgsMi4xMSwuODUsLjU3LC41NywuODUsMS4yOCwuODUsMi4xMXMtLjI4LDEuNDctLjg1LDJjLS41OCwuNTMtMS4yOCwuOC0yLjExLC44aC0xNC4ydjEwLjYxaDEzLjQ2Yy44MywwLDEuNTQsLjI3LDIuMTEsLjgzLC41NywuNTUsLjg2LDEuMjQsLjg2LDIuMDgsMCwuOC0uMjksMS40Ny0uODYsMi4wMi0uNTcsLjU1LTEuMjgsLjgzLTIuMTEsLjgzaC0xMy40NnYxMi4wOWgxNC42Yy44LDAsMS40OSwuMjcsMi4wOCwuODIsLjU5LC41NSwuODgsMS4yMywuODgsMi4wMiwwLC44NC0uMjksMS41My0uODgsMi4wOC0uNTksLjU1LTEuMjksLjgzLTIuMDgsLjgzaC0xNi45M1oiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTIwMS45MiwyNTcuMWMwLTIuMjEsLjM1LTQuMjIsMS4wNS02LjA1LC43MS0xLjgyLDEuNy0zLjM4LDIuOTktNC42NywxLjI5LTEuMjksMi44NC0yLjI5LDQuNjUtMi45OSwxLjgtLjcsMy44LTEuMDYsNi4wMS0xLjA2LDMuMDksMCw2LjAxLC45LDguNzksMi42OCwuOTEsLjYyLDEuMzcsMS40MywxLjM3LDIuNDYsMCwuNzYtLjI5LDEuNDItLjg1LDEuOTYtLjU4LC41Ni0xLjI4LC44My0yLjExLC44My0uNDksMC0xLS4xNi0xLjU0LS40Ni0uOTEtLjU3LTEuODQtMS4wMi0yLjc2LTEuMzctLjkzLS4zNC0xLjg5LS41MS0yLjg4LS41MS0yLjc3LDAtNC45MSwuODMtNi40MSwyLjUtMS41LDEuNjctMi4yNSwzLjktMi4yNSw2LjY3djExLjU3YzAsMi43OCwuNzUsNSwyLjI1LDYuNjcsMS41LDEuNjgsMy42NCwyLjUxLDYuNDEsMi41MSwuOTksMCwxLjk0LS4xOCwyLjg2LS41NCwuOTEtLjM2LDEuODItLjgzLDIuNzQtMS40LC40OS0uMzQsMS4wNS0uNTEsMS42NS0uNTEsLjc2LDAsMS40MywuMjcsMi4wMywuOCwuNTksLjUzLC44OCwxLjIyLC44OCwyLjA2LDAsMS4wNi0uNDYsMS45LTEuMzcsMi41LTIuNzcsMS43OS01LjcsMi42OC04Ljc5LDIuNjgtMi4yMSwwLTQuMjEtLjM1LTYuMDEtMS4wNS0xLjgxLS43LTMuMzYtMS43LTQuNjUtMi45OS0xLjMtMS4zLTIuMjktMi44NS0yLjk5LTQuNjctLjctMS44My0xLjA1LTMuODQtMS4wNS02LjA1di0xMS41N1oiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTI0MS4xNSwyNDguNjZoLTguNDRjLS44MywwLTEuNTItLjI4LTIuMDctLjgzLS41Ni0uNTUtLjgzLTEuMjItLjgzLTIuMDNzLjI4LTEuNTIsLjgzLTIuMDhjLjU1LS41NSwxLjI0LS44MiwyLjA3LS44MmgyMi44NmMuODQsMCwxLjU0LC4yNywyLjExLC44MiwuNTcsLjU1LC44NSwxLjI1LC44NSwyLjA4cy0uMjksMS40OC0uODUsMi4wM2MtLjU3LC41NS0xLjI4LC44My0yLjExLC44M2gtOC4zOHYzMS43NmMwLC44My0uMywxLjU1LS44OSwyLjE0LS41OSwuNTktMS4zLC44OC0yLjE0LC44OHMtMS41NS0uMy0yLjE0LS44OC0uODgtMS4zLS44OC0yLjE0di0zMS43NloiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTI3NS4wNywyNjYuMTFoLTUuMTN2MTQuMzdjMCwuODQtLjMsMS41NC0uOTEsMi4xMS0uNjIsLjU3LTEuMzIsLjg2LTIuMTEsLjg2LS44NCwwLTEuNTUtLjI5LTIuMTQtLjg2LS41OS0uNTctLjg4LTEuMjctLjg4LTIuMTF2LTMzLjkyYzAtLjk5LC4zNi0xLjg1LDEuMDgtMi41NywuNzMtLjczLDEuNi0xLjA5LDIuNjItMS4wOWgxMC42MWMzLjQ2LDAsNi4yNiwxLjA2LDguMzgsMy4xOSwyLjIxLDIuMjEsMy4zMSw1LjA2LDMuMzEsOC41NnMtMS4wOCw2LjI5LTMuMjUsOC4zOGMtMS4zMywxLjI2LTIuOTgsMi4xNS00Ljk2LDIuNjhsNy45MiwxMy4yOWMuMywuNDksLjQ1LDEsLjQ1LDEuNTMsMCwuNzYtLjI5LDEuNDMtLjg4LDIuMDMtLjYsLjU5LTEuMjksLjg4LTIuMDksLjg4LS41MywwLTEuMDEtLjEzLTEuNDUtLjM3LS40NC0uMjUtLjc5LS42LTEuMDUtMS4wNmwtOS41My0xNS45MVptMy4xNC01Ljc1Yy42NSwwLDEuMy0uMDgsMS45Ny0uMjMsLjY2LS4xNSwxLjI3LS40NCwxLjgyLS44OCwuNTUtLjQ0LDEtMS4wMywxLjM0LTEuNzcsLjM0LS43NCwuNTEtMS42OCwuNTEtMi44MiwwLTEuNzItLjQ5LTMuMTQtMS40Ni00LjI4LS45Ny0xLjE0LTIuMzYtMS43MS00LjE5LTEuNzFoLTguMjZ2MTEuNjloOC4yNloiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTI5Ni42NywyNDUuMzZjMC0uODMsLjI5LTEuNTUsLjg4LTIuMTQsLjU5LS41OSwxLjMtLjg4LDIuMTQtLjg4czEuNSwuMjksMi4xMSwuODhjLjYxLC41OSwuOTEsMS4zMSwuOTEsMi4xNHYzNS4wNmMwLC44My0uMywxLjU1LS45MSwyLjE0LS42MiwuNTktMS4zMiwuODgtMi4xMSwuODhzLTEuNTUtLjI5LTIuMTQtLjg4Yy0uNTktLjU5LS44OC0xLjMtLjg4LTIuMTR2LTM1LjA2WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzE3LjcxLDI2NS4wM3YxNS40NWMwLC44My0uMjksMS41NC0uODgsMi4xMS0uNTksLjU3LTEuMjgsLjg2LTIuMDgsLjg2LS44MywwLTEuNTYtLjI4LTIuMTctLjg2LS42MS0uNTctLjkxLTEuMjgtLjkxLTIuMTF2LTMzLjkyYzAtLjk5LC4zNi0xLjg0LDEuMDktMi41NywuNzItLjcyLDEuNTktMS4wOCwyLjYyLTEuMDhoMTYuMzZjLjg0LDAsMS41NCwuMjgsMi4xMSwuODIsLjU3LC41NiwuODUsMS4yNSwuODUsMi4wOXMtLjI4LDEuNDctLjg1LDIuMDNjLS41NywuNTUtMS4yOCwuODMtMi4xMSwuODNoLTE0LjAydjEwLjZoMTMuMjhjLjgzLDAsMS41NCwuMjcsMi4xMSwuODMsLjU3LC41NSwuODUsMS4yNSwuODUsMi4wOHMtLjI4LDEuNDgtLjg1LDIuMDNjLS41OCwuNTUtMS4yOCwuODMtMi4xMSwuODNoLTEzLjI4WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNMzQ4LjYxLDI2NS4zN2wtMTEtMTguNThjLS4yNi0uNDItLjQtLjkxLS40LTEuNDksMC0uNzYsLjI4LTEuNDQsLjgyLTIuMDUsLjU2LS42MSwxLjI1LS45MSwyLjA5LS45MSwuNTMsMCwxLjAyLC4xMiwxLjQ5LC4zNywuNDUsLjI1LC44MiwuNTksMS4wOCwxLjA1bDguODksMTUuNjIsOC45LTE1LjYyYy4yNy0uNDYsLjYzLS44MSwxLjA4LTEuMDUsLjQ2LS4yNSwuOTUtLjM3LDEuNDgtLjM3LC43NiwwLDEuNDQsLjI4LDIuMDIsLjg1LC42LC41NywuODksMS4yNywuODksMi4xMSwwLC41Ny0uMTQsMS4wNi0uNCwxLjQ5bC0xMSwxOC41OHYxNS4xYzAsLjg0LS4yOSwxLjU0LS44NSwyLjExLS41NywuNTgtMS4yOCwuODUtMi4xMSwuODVzLTEuNTQtLjI4LTIuMS0uODVjLS41Ny0uNTctLjg2LTEuMjgtLjg2LTIuMTF2LTE1LjFaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik0zOTQuNzMsMjQ4LjY2aC04LjQ0Yy0uODMsMC0xLjUzLS4yOC0yLjA3LS44My0uNTYtLjU1LS44My0xLjIyLS44My0yLjAzcy4yOC0xLjUyLC44My0yLjA4Yy41NS0uNTUsMS4yNC0uODIsMi4wNy0uODJoMjIuODZjLjg0LDAsMS41NCwuMjcsMi4xMSwuODIsLjU3LC41NSwuODUsMS4yNSwuODUsMi4wOHMtLjI5LDEuNDgtLjg1LDIuMDNjLS41NywuNTUtMS4yOCwuODMtMi4xMSwuODNoLTguMzh2MzEuNzZjMCwuODMtLjMsMS41NS0uODksMi4xNC0uNTksLjU5LTEuMywuODgtMi4xNCwuODhzLTEuNTUtLjMtMi4xNC0uODhjLS41OS0uNTktLjg4LTEuMy0uODgtMi4xNHYtMzEuNzZaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik00MzguMzQsMjY1LjAzaC0xNC44MnYxNS40YzAsLjgzLS4zLDEuNTQtLjg4LDIuMTQtLjYsLjU5LTEuMjgsLjg4LTIuMDksLjg4cy0xLjU1LS4zLTIuMTYtLjg4Yy0uNjEtLjU5LS45MS0xLjMtLjkxLTIuMTR2LTM1LjA3YzAtLjgzLC4zLTEuNTQsLjg4LTIuMTQsLjU5LS41OSwxLjMxLS44OCwyLjE0LS44OHMxLjUsLjMsMi4xMSwuODhjLjYxLC42LC45MSwxLjMsLjkxLDIuMTR2MTMuOTJoMTQuODJ2LTEzLjkyYzAtLjgzLC4yOS0xLjU0LC44OC0yLjE0LC41OS0uNTksMS4zLS44OCwyLjE0LS44OHMxLjU1LC4zLDIuMTQsLjg4Yy41OSwuNiwuODksMS4zLC44OSwyLjE0djM1LjA3YzAsLjgzLS4yOSwxLjU0LS44NiwyLjE0LS41NywuNTktMS4yNywuODgtMi4xMSwuODhzLTEuNTYtLjMtMi4xNy0uODhjLS42MS0uNTktLjkxLTEuMy0uOTEtMi4xNHYtMTUuNFoiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTQ1Ny4wNCwyODIuODdjLS45OSwwLTEuODYtLjM1LTIuNTktMS4wNS0uNzQtLjcxLTEuMTEtMS41Ny0xLjExLTIuNnYtMzIuNjZjMC0uOTksLjM2LTEuODQsMS4wOC0yLjU3LC43Mi0uNzIsMS42LTEuMDgsMi42Mi0xLjA4aDE2LjU0Yy44MywwLDEuNTMsLjI4LDIuMTEsLjg1LC41NywuNTcsLjg1LDEuMjgsLjg1LDIuMTFzLS4yOCwxLjQ3LS44NSwyYy0uNTgsLjUzLTEuMjgsLjgtMi4xMSwuOGgtMTQuMTl2MTAuNjFoMTMuNDVjLjgzLDAsMS41NCwuMjcsMi4xMSwuODMsLjU3LC41NSwuODYsMS4yNCwuODYsMi4wOCwwLC44LS4yOSwxLjQ3LS44NiwyLjAyLS41NywuNTUtMS4yOCwuODMtMi4xMSwuODNoLTEzLjQ1djEyLjA5aDE0LjU5Yy44LDAsMS40OSwuMjcsMi4wOCwuODIsLjU5LC41NSwuODksMS4yMywuODksMi4wMiwwLC44NC0uMywxLjUzLS44OSwyLjA4LS41OSwuNTUtMS4yOCwuODMtMi4wOCwuODNoLTE2LjkzWiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNTA1LjMzLDI2NS4wM3YxNS40NWMwLC44My0uMjksMS41NC0uODgsMi4xMS0uNTksLjU3LTEuMjgsLjg2LTIuMDgsLjg2LS44NCwwLTEuNTctLjI4LTIuMTctLjg2LS42MS0uNTctLjkxLTEuMjgtLjkxLTIuMTF2LTMzLjkyYzAtLjk5LC4zNi0xLjg0LDEuMDktMi41NywuNzItLjcyLDEuNTktMS4wOCwyLjYxLTEuMDhoMTYuMzdjLjg0LDAsMS41NCwuMjgsMi4xMSwuODIsLjU3LC41NiwuODUsMS4yNSwuODUsMi4wOXMtLjI4LDEuNDctLjg1LDIuMDNjLS41NywuNTUtMS4yNywuODMtMi4xMSwuODNoLTE0LjAydjEwLjZoMTMuMjhjLjgzLDAsMS41MywuMjcsMi4xMSwuODMsLjU3LC41NSwuODUsMS4yNSwuODUsMi4wOHMtLjI5LDEuNDgtLjg1LDIuMDNjLS41OCwuNTUtMS4yOCwuODMtMi4xMSwuODNoLTEzLjI4WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNTUwLjAzLDI0NS4zNmMwLS44MywuMjktMS41NSwuODgtMi4xNCwuNTktLjU5LDEuMy0uODgsMi4xNC0uODhzMS41MSwuMjksMi4xMSwuODhjLjYxLC41OSwuOTEsMS4zMSwuOTEsMi4xNHYyMy44OWMwLDIuMTMtLjM1LDQuMDctMS4wMyw1LjgxLS42OSwxLjc1LTEuNjUsMy4yNC0yLjg4LDQuNDgtMS4yNCwxLjI0LTIuNzMsMi4yLTQuNDgsMi44OC0xLjc1LC42OS0zLjY5LDEuMDMtNS44MSwxLjAzcy00LjA3LS4zNC01LjgyLTEuMDNjLTEuNzUtLjY4LTMuMjUtMS42NC00LjQ4LTIuODgtMS4yNC0xLjI0LTIuMTktMi43My0yLjg4LTQuNDgtLjY4LTEuNzUtMS4wMi0zLjY4LTEuMDItNS44MXYtMjMuODljMC0uODMsLjMtMS41NSwuOTEtMi4xNCwuNjEtLjU5LDEuMzMtLjg4LDIuMTYtLjg4czEuNSwuMjksMi4wOSwuODhjLjU5LC41OSwuODgsMS4zMSwuODgsMi4xNHYyNC4yM2MwLDIuNjEsLjcsNC42NSwyLjExLDYuMSwxLjQsMS40NCwzLjQyLDIuMTcsNi4wNSwyLjE3czQuNjMtLjcyLDYuMDQtMi4xN2MxLjQxLTEuNDQsMi4xMS0zLjQ4LDIuMTEtNi4xdi0yNC4yM1oiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTU3Mi4yNiwyNDguNjZoLTguNDRjLS44MywwLTEuNTItLjI4LTIuMDctLjgzLS41Ni0uNTUtLjgzLTEuMjItLjgzLTIuMDNzLjI4LTEuNTIsLjgzLTIuMDhjLjU1LS41NSwxLjI0LS44MiwyLjA3LS44MmgyMi44NmMuODQsMCwxLjU0LC4yNywyLjExLC44MiwuNTcsLjU1LC44NSwxLjI1LC44NSwyLjA4cy0uMjksMS40OC0uODUsMi4wM2MtLjU3LC41NS0xLjI4LC44My0yLjExLC44M2gtOC4zOHYzMS43NmMwLC44My0uMywxLjU1LS44OSwyLjE0LS41OSwuNTktMS4zLC44OC0yLjE0LC44OHMtMS41NS0uMy0yLjE0LS44OGMtLjU5LS41OS0uODgtMS4zLS44OC0yLjE0di0zMS43NloiLz4KICAgIDxwYXRoIGNsYXNzPSJjbHMtMSIgZD0iTTYxNi44NSwyNDUuMzZjMC0uODMsLjI5LTEuNTUsLjg4LTIuMTQsLjU5LS41OSwxLjMtLjg4LDIuMTQtLjg4czEuNTEsLjI5LDIuMTEsLjg4Yy42MSwuNTksLjkxLDEuMzEsLjkxLDIuMTR2MjMuODljMCwyLjEzLS4zNSw0LjA3LTEuMDMsNS44MS0uNjksMS43NS0xLjY1LDMuMjQtMi44OCw0LjQ4LTEuMjQsMS4yNC0yLjczLDIuMi00LjQ4LDIuODgtMS43NSwuNjktMy42OSwxLjAzLTUuODEsMS4wM3MtNC4wNy0uMzQtNS44Mi0xLjAzYy0xLjc1LS42OC0zLjI1LTEuNjQtNC40OC0yLjg4LTEuMjQtMS4yNC0yLjE5LTIuNzMtMi44OC00LjQ4LS42OC0xLjc1LTEuMDItMy42OC0xLjAyLTUuODF2LTIzLjg5YzAtLjgzLC4zLTEuNTUsLjkxLTIuMTQsLjYxLS41OSwxLjMzLS44OCwyLjE2LS44OHMxLjUsLjI5LDIuMDksLjg4Yy41OSwuNTksLjg4LDEuMzEsLjg4LDIuMTR2MjQuMjNjMCwyLjYxLC43LDQuNjUsMi4xMSw2LjEsMS40LDEuNDQsMy40MiwyLjE3LDYuMDUsMi4xN3M0LjYzLS43Miw2LjA0LTIuMTdjMS40MS0xLjQ0LDIuMTEtMy40OCwyLjExLTYuMXYtMjQuMjNaIi8+CiAgICA8cGF0aCBjbGFzcz0iY2xzLTEiIGQ9Ik02NDIuNSwyNjYuMTFoLTUuMTN2MTQuMzdjMCwuODQtLjMxLDEuNTQtLjkyLDIuMTEtLjYxLC41Ny0xLjMxLC44Ni0yLjEsLjg2LS44NCwwLTEuNTUtLjI5LTIuMTQtLjg2LS41OS0uNTctLjg4LTEuMjctLjg4LTIuMTF2LTMzLjkyYzAtLjk5LC4zNi0xLjg1LDEuMDktMi41NywuNzItLjczLDEuNTktMS4wOSwyLjYxLTEuMDloMTAuNjFjMy40NiwwLDYuMjYsMS4wNiw4LjM4LDMuMTksMi4yMSwyLjIxLDMuMzEsNS4wNiwzLjMxLDguNTZzLTEuMDgsNi4yOS0zLjI1LDguMzhjLTEuMzQsMS4yNi0yLjk5LDIuMTUtNC45NywyLjY4bDcuOTMsMTMuMjljLjMsLjQ5LC40NSwxLC40NSwxLjUzLDAsLjc2LS4yOSwxLjQzLS44OCwyLjAzLS42LC41OS0xLjI4LC44OC0yLjA5LC44OC0uNTMsMC0xLjAxLS4xMy0xLjQ1LS4zNy0uNDQtLjI1LS43OS0uNi0xLjA2LTEuMDZsLTkuNTItMTUuOTFabTMuMTQtNS43NWMuNjUsMCwxLjMtLjA4LDEuOTYtLjIzLC42Ny0uMTUsMS4yOC0uNDQsMS44My0uODhzMS0xLjAzLDEuMzQtMS43N2MuMzQtLjc0LC41MS0xLjY4LC41MS0yLjgyLDAtMS43Mi0uNDktMy4xNC0xLjQ2LTQuMjgtLjk3LTEuMTQtMi4zNy0xLjcxLTQuMTktMS43MWgtOC4yNnYxMS42OWg4LjI2WiIvPgogICAgPHBhdGggY2xhc3M9ImNscy0xIiBkPSJNNjY3LjgxLDI4Mi44N2MtLjk5LDAtMS44Ni0uMzUtMi41OS0xLjA1LS43NC0uNzEtMS4xMS0xLjU3LTEuMTEtMi42di0zMi42NmMwLS45OSwuMzYtMS44NCwxLjA4LTIuNTcsLjcyLS43MiwxLjYtMS4wOCwyLjYyLTEuMDhoMTYuNTRjLjgzLDAsMS41MywuMjgsMi4xLC44NSwuNTgsLjU3LC44NiwxLjI4LC44NiwyLjExcy0uMjgsMS40Ny0uODYsMmMtLjU3LC41My0xLjI3LC44LTIuMSwuOGgtMTQuMTl2MTAuNjFoMTMuNDVjLjgzLDAsMS41NCwuMjcsMi4xMSwuODMsLjU3LC41NSwuODYsMS4yNCwuODYsMi4wOCwwLC44LS4yOSwxLjQ3LS44NiwyLjAyLS41NywuNTUtMS4yOCwuODMtMi4xMSwuODNoLTEzLjQ1djEyLjA5aDE0LjU5Yy44LDAsMS40OSwuMjcsMi4wOCwuODIsLjYsLjU1LC44OSwxLjIzLC44OSwyLjAyLDAsLjg0LS4zLDEuNTMtLjg5LDIuMDgtLjU5LC41NS0xLjI4LC44My0yLjA4LC44M2gtMTYuOTNaIi8+CiAgPC9nPgo8L3N2Zz4=" },
   format: "A1-paysage", customW: 800, customH: 500, maxCols: 0, fontScale: 7, qrSize: 32, forceFormat: false, bookendWidth: 220, headerHeight: 56, bgImageHeight: 25, showLineTags: true, lineZoneLabel: "number", pdfResolution: 3,
@@ -575,7 +584,7 @@ const defaultData = () => ({
       "svgData": "<svg width=\"797\" height=\"1310\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\" xml:space=\"preserve\" overflow=\"hidden\"><g transform=\"translate(-1252 -588)\"><path d=\"M1262.5 727.836C1262.5 656.405 1320.41 598.5 1391.84 598.5L1909.16 598.5C1980.59 598.5 2038.5 656.405 2038.5 727.836L2038.5 1758.16C2038.5 1829.59 1980.59 1887.5 1909.16 1887.5L1391.84 1887.5C1320.41 1887.5 1262.5 1829.59 1262.5 1758.16Z\" stroke=\"#000000\" stroke-width=\"20.625\" stroke-linecap=\"round\" stroke-miterlimit=\"8\" fill=\"none\" fill-rule=\"evenodd\"/><path d=\"M1262.5 732.891C1262.5 658.669 1322.67 598.5 1396.89 598.5L1904.11 598.5C1978.33 598.5 2038.5 658.669 2038.5 732.891L2038.5 812.109C2038.5 886.331 1978.33 946.5 1904.11 946.5L1396.89 946.5C1322.67 946.5 1262.5 886.331 1262.5 812.109Z\" stroke=\"#000000\" stroke-width=\"20.625\" stroke-linecap=\"round\" stroke-miterlimit=\"8\" fill=\"none\" fill-rule=\"evenodd\"/><g><g><g><path d=\"M320.875 283.333 182.396 42.5C177.083 32.9375 163.271 32.9375 157.958 42.5L19.125 283.333C13.8125 292.896 20.5417 304.583 31.5208 304.583L170 304.583 308.479 304.583C319.458 304.583 326.187 292.896 320.875 283.333ZM146.625 273.062 166.812 191.25 137.771 191.25 151.937 102.708 194.437 102.708 175.667 170 205.417 170 146.625 273.062Z\" transform=\"matrix(1 0 0 1 1480 588)\"/></g></g></g></g></svg>"
     }
   ],
-  line: [],
+  line: [], version: "",
 });
 
 /* ═══════════════════ LINE EDITOR ═══════════════════ */
@@ -633,7 +642,12 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
       {/* ── SVG depuis la bibliothèque dossier ── */}
       {libSvgFiles.length > 0 && (
         <div>
-          <label style={{ fontSize:11,fontWeight:700,color:'#555',textTransform:'uppercase',letterSpacing:0.5,display:'block',marginBottom:6 }}>📂 SVG disponibles</label>
+          <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6 }}>
+            <label style={{ fontSize:11,fontWeight:700,color:'#555',textTransform:'uppercase',letterSpacing:0.5 }}>📂 SVG disponibles</label>
+            {libSvgFiles.some(n => !icons.some(ic => ic.name === n.replace(/\.svg$/i,''))) && (
+              <Btn small onClick={()=>libSvgFiles.filter(n=>!icons.some(ic=>ic.name===n.replace(/\.svg$/i,''))).forEach(n=>onLoadSvg(n))}>Tout importer</Btn>
+            )}
+          </div>
           <div style={{display:'flex',flexDirection:'column',gap:4}}>
             {libSvgFiles.map(name => {
               const already = icons.some(ic => ic.name === name.replace(/\.svg$/i,''));
@@ -771,6 +785,9 @@ export default function App() {
   const [libExpanded, setLibExpanded] = useState({});
   const [electronLib, setElectronLib] = useState(null); // { path } si library Electron détectée
   const [appVersion, setAppVersion] = useState(null);  // version depuis l'API Electron
+  const [saveModal, setSaveModal] = useState(null);     // { defaultName, onConfirm } ou null
+  const [saveModalInput, setSaveModalInput] = useState('');
+  const [versionNotice, setVersionNotice] = useState(null); // version du doc chargé si ≠ appVersion
 
   /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
   const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
@@ -779,7 +796,7 @@ export default function App() {
     if (window.__T_HTML) console.log('REACT_MOUNT +' + (Date.now() - window.__T_HTML) + 'ms depuis HTML parse');
     // Auto-détection Electron (API interne)
     fetch('/__api/version').then(r => r.ok ? r.json() : null).then(d => {
-      if (d && d.version) setAppVersion(d.version);
+      if (d && d.version) { setAppVersion(d.version); up(doc => { if (!doc.version) doc.version = d.version; }); }
     }).catch(() => {});
     fetch('/__api/library').then(r => r.ok ? r.json() : null).then(d => {
       if (d && !d.error) {
@@ -803,10 +820,13 @@ export default function App() {
   /** Export JSON : sérialise le state complet dans un fichier téléchargeable, ré-importable via importJSON. */
   const exportJSON = () => {
     const defaultName = data.header.reference ? `affiche_${data.header.reference}` : "affiche";
-    const name = prompt("Nom du fichier (sans extension) :", defaultName);
-    if (!name) return;
-    const b = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `${name}.json`; a.click(); URL.revokeObjectURL(u);
+    setSaveModalInput(defaultName);
+    setSaveModal({ defaultName, onConfirm: (name) => {
+      if (!name) return;
+      const b = new Blob([JSON.stringify({...data, version: appVersion || data.version}, null, 2)], { type: "application/json" });
+      const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `${name}.json`; a.click(); URL.revokeObjectURL(u);
+      setSaveModal(null);
+    }});
   };
 
   /**
@@ -854,7 +874,7 @@ ${xhtml}
     a.click();
   };
   /** Import JSON : lit un fichier .json et remplace le state complet. */
-  const importJSON = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { setData(JSON.parse(ev.target.result)); } catch { alert("JSON invalide"); } }; r.readAsText(f); };
+  const importJSON = (e) => { const f = e.target.files[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => { try { applyLoaded(JSON.parse(ev.target.result)); } catch { alert("JSON invalide"); } }; r.readAsText(f); };
 
   /** Charge une image (logo ou bandeau) depuis un input file et la stocke en base64 dans le state. */
   const handleImg = (ref, key) => () => { const f = ref.current?.files?.[0]; if (!f) return; const r = new FileReader(); r.onload = (ev) => up(d => { if (key === "logo") d.header.logoDataUrl = ev.target.result; else d.backgroundImage = ev.target.result; }); r.readAsDataURL(f); };
@@ -920,33 +940,48 @@ ${xhtml}
       return m ? Math.max(max, parseInt(m[2])) : max;
     }, 0);
     const suggested = `${base}_V${maxV + 1}`;
-    const nameInput = prompt("Nom du fichier (sans extension) :", suggested);
-    if (!nameInput) return;
-    if (electronLib) {
-      await fetch('/__api/library/' + encodeURIComponent(nameInput + '.json'), {
-        method: 'PUT', body: JSON.stringify(data, null, 2)
-      });
+    setSaveModalInput(suggested);
+    setSaveModal({ defaultName: suggested, onConfirm: async (nameInput) => {
+      if (!nameInput) return;
+      setSaveModal(null);
+      if (electronLib) {
+        await fetch('/__api/library/' + encodeURIComponent(nameInput + '.json'), {
+          method: 'PUT', body: JSON.stringify({...data, version: appVersion || data.version}, null, 2)
+        });
+        await refreshLibrary();
+        return;
+      }
+      const fh = await libDirHandle.getFileHandle(`${nameInput}.json`, { create: true });
+      const w = await fh.createWritable();
+      await w.write(JSON.stringify({...data, version: appVersion || data.version}, null, 2));
+      await w.close();
       await refreshLibrary();
-      return;
-    }
-    const fh = await libDirHandle.getFileHandle(`${nameInput}.json`, { create: true });
-    const w = await fh.createWritable();
-    await w.write(JSON.stringify(data, null, 2));
-    await w.close();
-    await refreshLibrary();
+    }});
+  };
+  const advanceId = (parsed) => {
+    const nums = JSON.stringify(parsed).match(/"_(\d+)"/g) || [];
+    const max = nums.reduce((m, s) => Math.max(m, parseInt(s.slice(2, -1))), _id - 1);
+    if (max >= _id) _id = max + 1;
+  };
+  const applyLoaded = (parsed) => {
+    advanceId(parsed);
+    setData(parsed);
+    if (parsed.version && appVersion && parsed.version !== appVersion)
+      setVersionNotice(parsed.version);
+    else setVersionNotice(null);
   };
   const loadFromLibrary = async (name) => {
     if (electronLib) {
       try {
         const r = await fetch('/__api/library/' + encodeURIComponent(name));
-        if (r.ok) { setData(JSON.parse(await r.text())); } else { alert('Fichier introuvable'); }
+        if (r.ok) { applyLoaded(JSON.parse(await r.text())); } else { alert('Fichier introuvable'); }
       } catch { alert('Erreur de lecture'); }
       return;
     }
     if (!libDirHandle) return;
     const fh = await libDirHandle.getFileHandle(name);
     const file = await fh.getFile();
-    try { setData(JSON.parse(await file.text())); } catch { alert('JSON invalide'); }
+    try { applyLoaded(JSON.parse(await file.text())); } catch { alert('JSON invalide'); }
   };
   const deleteFromLibrary = async (name) => {
     if (!confirm(`Supprimer ${name} ?`)) return;
@@ -968,13 +1003,32 @@ ${xhtml}
       {/* ── Sidebar d'édition (360px, rétractable) ── */}
       <div style={{ width:sidebarOpen?360:0,minWidth:sidebarOpen?360:0,transition:"width 0.2s,min-width 0.2s",borderRight:"1px solid #e0e0e0",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden" }}>
         {sidebarOpen && <>
-          <div style={{ padding:"12px 14px",borderBottom:"1px solid #e0e0e0",background:"#C8102E",color:"#fff" }}>
-            <div style={{ fontSize:14,fontWeight:700 }}>Éditeur d'affiche</div><div style={{ fontSize:10,opacity:0.8 }}>Ligne de production</div>
+          <div style={{ padding:"12px 14px",borderBottom:"1px solid #e0e0e0",background:"#C8102E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+            <div><div style={{ fontSize:14,fontWeight:700 }}>Éditeur d'affiche</div><div style={{ fontSize:10,opacity:0.8 }}>Ligne de production</div></div>
+            <button onClick={()=>{if(confirm("Créer un nouveau document vide ?")){ _id=120; setVersionNotice(null); setData({...emptyData(), version: appVersion||""}); }}} style={{ background:"rgba(255,255,255,0.18)",border:"1px solid rgba(255,255,255,0.4)",color:"#fff",borderRadius:5,padding:"4px 10px",fontSize:11,cursor:"pointer",fontWeight:600 }}>Nettoyer</button>
           </div>
           <div style={{ display:"flex",flexWrap:"wrap",borderBottom:"1px solid #e0e0e0" }}>
             {tabs.map(t=><button key={t.key} onClick={()=>setTab(t.key)} style={{ flex:1,minWidth:56,padding:"8px 4px",border:"none",borderBottom:tab===t.key?"2.5px solid #C8102E":"2.5px solid transparent",background:tab===t.key?"#FFF5F5":"transparent",color:tab===t.key?"#C8102E":"#888",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}><span style={{ fontSize:14 }}>{t.icon}</span>{t.label}</button>)}
           </div>
           <div style={{ flex:1,overflowY:"auto",padding:12 }}>
+            {versionNotice && (
+              <div style={{ marginBottom:8,padding:"8px 12px",background:"#FFF3E0",border:"1px solid #FF9800",borderRadius:6,fontSize:11,color:"#E65100",display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ flex:1 }}>⚠ Document créé avec v{versionNotice} — version actuelle : v{appVersion}</span>
+                <span onClick={()=>setVersionNotice(null)} style={{ cursor:"pointer",opacity:0.5,fontSize:13 }}>✕</span>
+              </div>
+            )}
+            {saveModal && (
+              <div style={{ marginBottom:8,padding:"10px 12px",background:"#FFFDE7",border:"1px solid #F9A825",borderRadius:7,display:"flex",flexDirection:"column",gap:8 }}>
+                <label style={{ fontSize:11,fontWeight:600,color:"#555" }}>Nom du fichier (sans extension)</label>
+                <input autoFocus value={saveModalInput} onChange={e=>setSaveModalInput(e.target.value)}
+                  onKeyDown={e=>{ if(e.key==="Enter") saveModal.onConfirm(saveModalInput); if(e.key==="Escape") setSaveModal(null); }}
+                  style={{ fontSize:12,padding:"5px 8px",border:"1px solid #ddd",borderRadius:5,outline:"none" }} />
+                <div style={{ display:"flex",gap:6 }}>
+                  <Btn onClick={()=>saveModal.onConfirm(saveModalInput)} style={{ flex:1 }}>✓ Confirmer</Btn>
+                  <Btn outline color="#888" onClick={()=>setSaveModal(null)}>Annuler</Btn>
+                </div>
+              </div>
+            )}
             {tab === "header" && (
               <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
                 <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Référence</label><Input value={data.header.reference} onChange={v=>up(d=>{d.header.reference=v;})} />
@@ -1078,7 +1132,7 @@ ${xhtml}
                   <Btn onClick={exportPDF} color="#1565C0" style={{ flex:1 }}>↓ Exporter PDF</Btn>
                 </div>
                 <div style={{ borderTop:"1px solid #e0e0e0",paddingTop:12 }}><label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Importer JSON</label><input ref={fileRef} type="file" accept=".json" onChange={importJSON} style={{ fontSize:11,marginTop:4 }} /></div>
-                <Btn outline color="#d32f2f" onClick={()=>{if(confirm("Réinitialiser ?"))setData(defaultData());}}>↺ Réinitialiser</Btn>
+                <Btn outline color="#d32f2f" onClick={()=>{if(confirm("Réinitialiser ?")){ setVersionNotice(null); setData({...defaultData(), version: appVersion||""}); }}}>↺ Réinitialiser</Btn>
               </div>
             )}
             {tab === "library" && (
@@ -1115,7 +1169,6 @@ ${xhtml}
                                 <div key={name} style={{ display:"flex",alignItems:"center",gap:6,background:"#fafafa",border:"1px solid #eee",borderRadius:5,padding:"6px 8px" }}>
                                   <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>📄 {name.replace(/\.json$/,'')}</span>
                                   <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
-                                  <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:13 }}>✕</span>
                                 </div>
                               );
                             }
@@ -1134,7 +1187,6 @@ ${xhtml}
                                       <span style={{ fontSize:10,color:"#777",marginRight:2 }}>{i === files.length-1 ? "└" : "├"}</span>
                                       <span style={{ flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
                                       <Btn small onClick={()=>loadFromLibrary(name)}>Charger</Btn>
-                                      <span onClick={()=>deleteFromLibrary(name)} style={{ cursor:"pointer",color:"#ccc",fontSize:13 }}>✕</span>
                                     </div>
                                   );
                                 })}
@@ -1159,7 +1211,7 @@ ${xhtml}
           <span style={{ fontSize:10,color:"#aaa",marginLeft:"auto" }}>{data.header.reference} — {data.format}{appVersion ? ` — v${appVersion}` : ''}</span>
         </div>
         {/* Poster rendu à taille réelle puis réduit par transform: scale() pour tenir dans la fenêtre */}
-        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}><PosterPreview data={data} /></div></div>;})()}
+        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}><PosterPreview data={data} appVersion={appVersion} /></div></div>;})()}
       </div>
       {/* Styles d'impression : masque la sidebar et supprime le scaling pour imprimer le poster en taille réelle */}
       <style>{`@media print{body>div>div:first-child,[style*="borderBottom"]{display:none!important}[style*="overflow: auto"]{overflow:visible!important;padding:0!important;background:white!important}[style*="transform"]{transform:none!important}}`}</style>

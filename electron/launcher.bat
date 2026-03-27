@@ -4,7 +4,7 @@ set "LOCAL=%LOCALAPPDATA%\NexansAffiche"
 set "SRC=%~dp0Nexans Affiche-win32-x64"
 set "LIBRARY=%~dp0library"
 set "VERSION_FILE=%LOCAL%\.version"
-set "VERSION=1.0.2"
+set "VERSION=1.0.3"
 
 :: Creer le dossier library partage s'il n'existe pas
 if not exist "%LIBRARY%" mkdir "%LIBRARY%"
@@ -26,5 +26,6 @@ if not "%LOCAL_VER%"=="%VERSION%" (
     echo Installation terminee.
 )
 
+set ELECTRON_RUN_AS_NODE=
 start "" "%LOCAL%\app\Nexans Affiche.exe" "--library=%LIBRARY%"
 endlocal
