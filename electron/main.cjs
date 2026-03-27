@@ -258,14 +258,36 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
   win.loadURL('data:text/html,' + encodeURIComponent(splashHTML))
   win.show()
 
-  // Events d'instrumentation
+  // Machine à états : SPLASH_LOADING → SPLASH_VISIBLE → APP_LOADING → APP_READY
+  // Le timer 5s démarre quand le splash est réellement rendu, pas depuis T0
+  let phase = 'SPLASH_LOADING'
+
+  function scheduleAppLoad(delay) {
+    const FADE_MS = 600
+    setTimeout(() => {
+      if (phase !== 'SPLASH_VISIBLE') return
+      win.webContents.executeJavaScript(
+        'document.body.style.cssText+="transition:opacity .6s ease;opacity:0"'
+      ).catch(() => {})
+    }, Math.max(0, delay - FADE_MS))
+    setTimeout(() => {
+      if (phase !== 'SPLASH_VISIBLE') return
+      phase = 'APP_LOADING'
+      log('T5 loadURL http://127.0.0.1:' + port + '/ (+' + (Date.now() - T0) + 'ms)')
+      win.webContents.insertCSS('body{opacity:0!important;transition:opacity .6s ease .1s}').catch(() => {})
+      win.loadURL(`http://127.0.0.1:${port}/`)
+    }, delay)
+  }
+
   win.webContents.on('did-start-loading', () => log('T6 did-start-loading (+' + (Date.now() - T0) + 'ms)'))
   win.webContents.on('dom-ready', () => log('T7 dom-ready (+' + (Date.now() - T0) + 'ms)'))
-  let appLoading = false
   win.webContents.on('did-finish-load', () => {
-    log('T8 did-finish-load (+' + (Date.now() - T0) + 'ms)')
-    if (appLoading) {
-      // Fade-in de l'app après chargement
+    log('T8 did-finish-load phase=' + phase + ' (+' + (Date.now() - T0) + 'ms)')
+    if (phase === 'SPLASH_LOADING') {
+      phase = 'SPLASH_VISIBLE'
+      scheduleAppLoad(5000)  // timer 5s depuis que le splash est visible
+    } else if (phase === 'APP_LOADING') {
+      phase = 'APP_READY'
       win.webContents.executeJavaScript('document.body.style.opacity="1"').catch(() => {})
     }
   })
@@ -273,26 +295,14 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
   win.webContents.on('console-message', (_e, _lv, msg) => log('CONSOLE: ' + msg))
   win.webContents.on('render-process-gone', (_e, details) => log('RENDERER CRASH: ' + JSON.stringify(details)))
 
-  // Charger l'app après 5s minimum de splash, avec fondu
-  const MIN_SPLASH_MS = 5000
-  const FADE_MS = 600
-  const delay = Math.max(FADE_MS, MIN_SPLASH_MS - (Date.now() - T0))
-  log('T5 splash, chargement dans ' + delay + 'ms')
-
-  // Fade-out du splash 600ms avant la navigation
+  // Fallback : si le splash ne charge pas en 20s (renderer bloqué), forcer l'app
   setTimeout(() => {
-    win.webContents.executeJavaScript(
-      'document.body.style.cssText+="transition:opacity .6s ease;opacity:0"'
-    ).catch(() => {})
-  }, delay - FADE_MS)
-
-  // Navigation vers l'app après le fondu
-  setTimeout(() => {
-    log('T5 loadURL http://127.0.0.1:' + port + '/ (+' + (Date.now() - T0) + 'ms)')
-    appLoading = true
-    win.webContents.insertCSS('body{opacity:0!important;transition:opacity .6s ease .1s}').catch(() => {})
-    win.loadURL(`http://127.0.0.1:${port}/`)
-  }, delay)
+    if (phase === 'SPLASH_LOADING') {
+      log('SPLASH TIMEOUT - forcing app load')
+      phase = 'SPLASH_VISIBLE'
+      scheduleAppLoad(0)
+    }
+  }, 20000)
   return win
 }
 
