@@ -70,3 +70,8 @@ Voir `defaultData()` ligne 302 pour la structure complete. Points cles :
 - Le poster est affiche dans un `transform: scale()` dans le preview — les exports doivent capturer l'element `[data-poster-root]` directement, pas le wrapper scale.
 - `MM_PX = 1.4` : facteur de conversion mm vers pixels pour le rendu ecran. Ce n'est pas un DPI standard, c'est un choix de rendu.
 - Les IDs sont generes par `uid()` (compteur incremental). Ils ne sont pas persistants entre sessions — le JSON sauvegarde les IDs tels quels.
+
+## A chaque modification du build:
+
+- Mettre à jour la version après chaque build.
+- Il faut imperativement la modifier pour que le fichier .bat de lancement détecte le changement de fichier

@@ -374,12 +374,7 @@
         "items": [
           {
             "id": "_207",
-            "name": "Câble isolé",
-            "tags": []
-          },
-          {
-            "id": "_209",
-            "name": "Câble coloré",
+            "name": "Fil isolé coloré",
             "tags": []
           }
         ]
@@ -494,6 +489,17 @@
             "tags": [
               {
                 "id": "_232",
+                "type": "IC",
+                "url": ""
+              }
+            ]
+          },
+          {
+            "id": "_222",
+            "name": "Longueur câble",
+            "tags": [
+              {
+                "id": "_223",
                 "type": "IC",
                 "url": ""
               }
@@ -645,7 +651,7 @@
       "stepId": "_200"
     }
   ],
-  "pdfResolution": 3,
+  "pdfResolution": 4,
   "headerHeight": 76,
   "showLineTags": false,
   "lineZoneLabel": "title"

@@ -9,7 +9,7 @@
   "customW": 800,
   "customH": 500,
   "maxCols": 0,
-  "fontScale": 0.9,
+  "fontScale": 6,
   "qrSize": 52,
   "forceFormat": false,
   "bookendWidth": 140,

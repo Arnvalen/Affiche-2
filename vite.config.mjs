@@ -17,6 +17,9 @@ export default defineConfig({
       : true
   },
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: { inlineDynamicImports: true }
+    }
   }
 })
