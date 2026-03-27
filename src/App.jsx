@@ -112,7 +112,7 @@ const TagWithQR = ({ tag, scale, qrSize }) => {
 /** Bouton stylisé avec variantes : couleur, petite taille, outline. Couleur par défaut = rouge Nexans. */
 const Btn = ({ children, onClick, color="#C8102E", small, outline, style:st, ...r }) => <button onClick={onClick} style={{ display:"inline-flex",alignItems:"center",gap:4,padding:small?"3px 8px":"6px 12px",borderRadius:5,border:outline?`1.5px solid ${color}`:"none",background:outline?"transparent":color,color:outline?color:"#fff",fontSize:small?11:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",...st }} {...r}>{children}</button>;
 /** Champ texte stylisé avec gestion simplifiée du onChange (reçoit directement la valeur, pas l'event). */
-const Input = ({ value, onChange, placeholder, style:st, ...r }) => <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{ width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit",outline:"none",...st }} {...r} />;
+const Input = ({ value, onChange, placeholder, style:st, ...r }) => <input value={value} onChange={e=>onChange(e.target.value)} onFocus={e=>e.target.select()} placeholder={placeholder} style={{ width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit",outline:"none",...st }} {...r} />;
 /** Carte dépliable avec titre, contenu et actions optionnelles dans la barre de titre. */
 const SectionCard = ({ title, children, actions, defaultOpen=true }) => { const [open,setOpen]=useState(defaultOpen); return <div style={{background:"#fff",borderRadius:8,border:"1px solid #e0e0e0",overflow:"hidden",marginBottom:10}}><div onClick={()=>setOpen(!open)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#f5f5f5",cursor:"pointer",userSelect:"none"}}><span style={{fontSize:12,fontWeight:700,color:"#424242"}}>{open?"▾":"▸"} {title}</span>{actions&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",gap:4}}>{actions}</div>}</div>{open&&<div style={{padding:10}}>{children}</div>}</div>; };
 
@@ -776,6 +776,8 @@ export default function App() {
   const [data, setData] = useState(defaultData);       // Modèle de données complet
   const [tab, setTab] = useState("header");             // Onglet actif dans la sidebar
   const [sidebarOpen, setSidebarOpen] = useState(true); // Visibilité de la sidebar
+  const [sidebarWidth, setSidebarWidth] = useState(360); // Largeur de la sidebar (redimensionnable)
+  const sidebarDragRef = useRef(null); // état du drag de redimensionnement
   const fileRef = useRef(), logoRef = useRef(), bgRef = useRef(); // Refs pour les inputs file
   const previewContainerRef = useRef();
   const [previewSize, setPreviewSize] = useState({ w: 700, h: 500 });
@@ -1000,8 +1002,8 @@ ${xhtml}
 
   return (
     <div style={{ display:"flex",height:"100vh",fontFamily:"'Segoe UI',system-ui,sans-serif",color:"#212121",overflow:"hidden" }}>
-      {/* ── Sidebar d'édition (360px, rétractable) ── */}
-      <div style={{ width:sidebarOpen?360:0,minWidth:sidebarOpen?360:0,transition:"width 0.2s,min-width 0.2s",borderRight:"1px solid #e0e0e0",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden" }}>
+      {/* ── Sidebar d'édition (redimensionnable, rétractable) ── */}
+      <div style={{ width:sidebarOpen?sidebarWidth:0,minWidth:sidebarOpen?sidebarWidth:0,transition:"width 0.2s,min-width 0.2s",display:"flex",flexDirection:"column",background:"#fff",overflow:"hidden" }}>
         {sidebarOpen && <>
           <div style={{ padding:"12px 14px",borderBottom:"1px solid #e0e0e0",background:"#C8102E",color:"#fff",display:"flex",alignItems:"center",justifyContent:"space-between" }}>
             <div><div style={{ fontSize:14,fontWeight:700 }}>Éditeur d'affiche</div><div style={{ fontSize:10,opacity:0.8 }}>Ligne de production</div></div>
@@ -1010,7 +1012,7 @@ ${xhtml}
           <div style={{ display:"flex",flexWrap:"wrap",borderBottom:"1px solid #e0e0e0" }}>
             {tabs.map(t=><button key={t.key} onClick={()=>setTab(t.key)} style={{ flex:1,minWidth:56,padding:"8px 4px",border:"none",borderBottom:tab===t.key?"2.5px solid #C8102E":"2.5px solid transparent",background:tab===t.key?"#FFF5F5":"transparent",color:tab===t.key?"#C8102E":"#888",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}><span style={{ fontSize:14 }}>{t.icon}</span>{t.label}</button>)}
           </div>
-          <div style={{ flex:1,overflowY:"auto",padding:12 }}>
+          <div style={{ flex:1,overflowY:"auto",padding:12,zoom:Math.min(1.8,Math.max(1,sidebarWidth/360)).toFixed(3) }}>
             {versionNotice && (
               <div style={{ marginBottom:8,padding:"8px 12px",background:"#FFF3E0",border:"1px solid #FF9800",borderRadius:6,fontSize:11,color:"#E65100",display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ flex:1 }}>⚠ Document créé avec v{versionNotice} — version actuelle : v{appVersion}</span>
@@ -1203,6 +1205,11 @@ ${xhtml}
         </>}
         {appVersion && <div style={{ padding:"8px 16px",borderTop:"1px solid #eee",fontSize:10,color:"#bbb",textAlign:"center" }}>Nexans Affiche v{appVersion}</div>}
       </div>
+      {/* ── Poignée de redimensionnement de la sidebar ── */}
+      {sidebarOpen && <div
+        onMouseDown={e=>{e.preventDefault();const startX=e.clientX,startW=sidebarWidth;const onMove=ev=>{setSidebarWidth(Math.max(260,Math.min(700,startW+(ev.clientX-startX))));};const onUp=()=>{window.removeEventListener('mousemove',onMove);window.removeEventListener('mouseup',onUp);};window.addEventListener('mousemove',onMove);window.addEventListener('mouseup',onUp);}}
+        style={{ width:6,flexShrink:0,cursor:"ew-resize",background:"transparent",borderRight:"1px solid #e0e0e0" }}
+      />}
       {/* ── Zone d'aperçu (droite) ── */}
       <div style={{ flex:1,display:"flex",flexDirection:"column",overflow:"hidden" }}>
         <div style={{ display:"flex",alignItems:"center",padding:"8px 16px",borderBottom:"1px solid #e0e0e0",background:"#fafafa",gap:12 }}>
