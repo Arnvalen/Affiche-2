@@ -1087,9 +1087,6 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
             <span style={{ color:"#666" }}>{st.title}</span>
           </span>;
         })}
-        {interactive && <span style={{ marginLeft:"auto",fontSize:9*s,color:pal.primary,fontWeight:600,fontStyle:"italic" }}>
-          {planTool==='zone' ? `⬜ Cliquer-glisser → Zone étape ${(planSelStep||0)+1}` : `⬤ Cliquer → ${line[planSelMachine]?(String.fromCharCode(65+planSelMachine)):''} Machine`}
-        </span>}
       </div>
 
       {/* Corps : vues empilées */}
@@ -1200,8 +1197,9 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
       {/* Footer — identique à PosterPreview */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.footer,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
         <span><strong style={{ color:"#fff" }}>Version :</strong> {data.version || '—'}</span>
+        <span><strong style={{ color:"#fff" }}>Ligne :</strong> {data.header.processName}</span>
         <span><strong style={{ color:"#fff" }}>Format :</strong> {data.format} · {fmt.w}×{fmt.h}mm · Plan technique</span>
-        {appVersion && <span style={{ opacity:0.5 }}>Nexans Affiche v{appVersion}</span>}
+        {appVersion && <span style={{ opacity:0.5 }}>v{appVersion}</span>}
       </div>
     </div>
   );

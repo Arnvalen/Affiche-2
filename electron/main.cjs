@@ -252,7 +252,7 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
 <img class="logo" src="data:image/png;base64,${logoB64}">
 <div class="title">\u00c9diteur d\u2019affiche \u2014 Ligne de production</div>
 <div class="bar-wrap"><div class="bar"></div></div>
-<div class="credits">D\u00e9velopp\u00e9 par <b>Arnaud Valente Jacot-Descombes</b><br>D\u00e9partement Quality Management \u2014 Nexans</div>
+<div class="credits">D\u00e9velopp\u00e9 par <b>Arnaud Valente Jacot-Descombes</b><br>Quality Management \u2014 Nexans</div>
 <div class="version">v${app.getVersion()}</div>
 </body></html>`
   win.loadURL('data:text/html,' + encodeURIComponent(splashHTML))
