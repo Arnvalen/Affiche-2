@@ -582,7 +582,7 @@ const emptyData = () => ({
   entree: { tags: [], sections: [] },
   sortie: { tags: [], sections: [] },
   steps: [], backgroundImage: "", icons: [], line: [], version: "",
-  technicalPlan: { views: [
+  technicalPlan: { zoneLabel:"number", views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -658,7 +658,7 @@ const defaultData = () => ({
     }
   ],
   line: [], version: "",
-  technicalPlan: { views: [
+  technicalPlan: { zoneLabel:"number", views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -854,7 +854,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
   const [activeView, setActiveView] = useState(0);
   const imgInputRefs = [useRef(), useRef()];
 
-  const tp = data.technicalPlan || { views:[
+  const tp = data.technicalPlan || { zoneLabel:"number", views:[
     { id:"top",label:"Vue de dessus",imageDataUrl:null,stepZones:[],machineLabels:[] },
     { id:"side",label:"Vue de côté",imageDataUrl:null,stepZones:[],machineLabels:[] },
   ]};
@@ -919,6 +919,16 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
         )}
         {planTool === 'zone' && steps.length === 0 && <div style={{ fontSize:10,color:"#bbb",marginTop:6 }}>Ajoute des étapes dans l'onglet Process.</div>}
         {planTool === 'machine' && line.length === 0 && <div style={{ fontSize:10,color:"#bbb",marginTop:6 }}>Ajoute des machines dans l'onglet Ligne.</div>}
+        {planTool === 'zone' && steps.length > 0 && (
+          <div style={{ marginTop:8 }}>
+            <label style={{ fontSize:11,color:"#666" }}>Badge de zone</label>
+            <div style={{ display:"flex",gap:6,marginTop:4 }}>
+              {[['number','⟨1⟩ Numéro'],['text','⟨texte⟩ Titre']].map(([k,l])=>(
+                <button key={k} onClick={()=>up(d=>{d.technicalPlan.zoneLabel=k;})} style={{ flex:1,padding:"5px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:tp.zoneLabel===k?"2px solid #E87722":"1.5px solid #ddd",background:tp.zoneLabel===k?"#FFF3E0":"#fff",color:tp.zoneLabel===k?"#E87722":"#666" }}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Annotations existantes */}
@@ -967,11 +977,19 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   const s = (data.fontScale || 7) * 0.15;
   const hh = data.headerHeight || 56;
   const hr = hh / 56, hs = s * hr;
-  const tp = data.technicalPlan || { views:[] };
+  const tp = data.technicalPlan || { zoneLabel:"number", views:[] };
   const steps = data.steps || [];
   const line = data.line || [];
   const icons = data.icons || [];
   const totalSteps = steps.length;
+
+  // Couleur d'une machine = couleur de l'étape à laquelle elle est liée (comme PosterPreview.getMachineInfo)
+  const getMachinePlanColor = (lineIndex) => {
+    const item = line[lineIndex];
+    if (!item || !item.stepId) return pal.primary;
+    const si = steps.findIndex(s => s.id === item.stepId);
+    return si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
+  };
 
   const [drawing, setDrawing] = useState(null);     // { x, y, vi, selStep } en cours de drag
   const [currentRect, setCurrentRect] = useState(null);
@@ -1042,7 +1060,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
         {steps.map((st,si)=>{
           const color=getZoneColor(pal,si,totalSteps);
           return <span key={st.id} style={{ display:"inline-flex",alignItems:"center",gap:3*s }}>
-            <span style={{ width:14*s,height:14*s,borderRadius:2,background:color,color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700 }}>{si+1}</span>
+            <span style={{ width:14*s,height:14*s,borderRadius:"50%",background:color,color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700 }}>{si+1}</span>
             <span style={{ color:"#666" }}>{st.title}</span>
           </span>;
         })}
@@ -1078,17 +1096,24 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                   {/* Zones d'étapes — style ligne de production (rounded rect + badge rond) */}
                   {view.stepZones.map(z => {
                     const color = getZoneColor(pal,z.stepIndex,totalSteps);
+                    const step = steps[z.stepIndex];
+                    const badgeContent = tp.zoneLabel === 'text'
+                      ? <span style={{ fontSize:Math.max(6,9*s),fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"90%" }}>{step?.title||String(z.stepIndex+1)}</span>
+                      : <span style={{ fontSize:Math.max(8,13*s),fontWeight:700,fontFamily:"monospace" }}>{z.stepIndex+1}</span>;
+                    const badgeW = tp.zoneLabel === 'text' ? 'auto' : 22*s;
+                    const badgePad = tp.zoneLabel === 'text' ? `0 ${Math.max(4,6*s)}px` : 0;
                     return (
                       <div key={z.id} style={{ position:"absolute",left:z.x+'%',top:z.y+'%',width:z.w+'%',height:z.h+'%',border:`${Math.max(1.5,2*s)}px solid ${color}`,borderRadius:Math.max(3,6*s),background:color+'22',boxSizing:"border-box",pointerEvents:"none" }}>
-                        <div style={{ position:"absolute",top:-(11*s),left:-(11*s),width:22*s,height:22*s,borderRadius:"50%",background:color,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",flexShrink:0 }}>{z.stepIndex+1}</div>
+                        <div style={{ position:"absolute",top:-(11*s),left:-(11*s),minWidth:22*s,width:badgeW,height:22*s,borderRadius:tp.zoneLabel==='text'?Math.max(3,11*s):"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:badgePad,flexShrink:0,boxSizing:"content-box" }}>{badgeContent}</div>
                       </div>
                     );
                   })}
-                  {/* Lettres machines — style badge ligne de production */}
+                  {/* Lettres machines — style badge ligne de production, couleur = étape liée */}
                   {view.machineLabels.map(m => {
                     const letter = String.fromCharCode(65+m.lineIndex);
+                    const mColor = getMachinePlanColor(m.lineIndex);
                     return (
-                      <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:pal.primary,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)` }}>{letter}</div>
+                      <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:mColor,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)` }}>{letter}</div>
                     );
                   })}
                   {/* Rectangle en cours de dessin */}
@@ -1119,9 +1144,10 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                   {[...new Set(view.machineLabels.map(m=>m.lineIndex))].sort((a,b)=>a-b).map(li=>{
                     const item=line[li]; const icon=(icons||[]).find(ic=>ic.id===(item||{}).iconId);
                     const letter=String.fromCharCode(65+li);
+                    const mColor = getMachinePlanColor(li);
                     return (
                       <div key={li} style={{ display:"flex",alignItems:"center",gap:4*s }}>
-                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
+                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
                         <span style={{ fontSize:9*s,color:"#333",lineHeight:1.3,flex:1 }}>{icon?.name||"—"}</span>
                       </div>
                     );
@@ -1356,10 +1382,11 @@ ${xhtml}
   const applyLoaded = (parsed) => {
     advanceId(parsed);
     // Rétrocompatibilité : ajouter technicalPlan si absent
-    if (!parsed.technicalPlan) parsed.technicalPlan = { views:[
+    if (!parsed.technicalPlan) parsed.technicalPlan = { zoneLabel:"number", views:[
       { id:"top", label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
       { id:"side", label:"Vue de côté",  imageDataUrl:null, stepZones:[], machineLabels:[] },
     ]};
+    if (!parsed.technicalPlan.zoneLabel) parsed.technicalPlan.zoneLabel = "number";
     setData(parsed);
     if (parsed.version && appVersion && parsed.version !== appVersion)
       setVersionNotice(parsed.version);
