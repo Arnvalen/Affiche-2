@@ -2,7 +2,11 @@
 
 ## Description
 
-Editeur web d'affiches de lignes de production Nexans. Application React monopage (SPA) avec Vite. Tout le code applicatif est dans `src/App.jsx` (~500 lignes).
+Editeur web d'affiches de lignes de production Nexans. Application React monopage (SPA) avec Vite. Tout le code applicatif est dans `src/App.jsx` (~1500 lignes).
+
+L'app produit deux types d'affiches :
+- **Affiche visuelle** : représentation abstraite (icônes, étapes, tags, QR codes)
+- **Affiche technique** : plans techniques importés (images) avec zones annotées à la souris
 
 ## Commandes
 
@@ -24,14 +28,31 @@ npm run build        # Build production dans dist/
 
 Le fichier est organise en sections separees par des commentaires `/* ═══ ... ═══ */` :
 
-1. **Constantes** (lignes 6-18) : TAG_TYPES, TAG_COLORS, FORMATS, MM_PX
-2. **QRCodeSVG** (lignes 20-38) : QR codes en SVG natif via `qrcode` lib
-3. **Tag / TagWithQR** (lignes 40-56) : badges de tags avec QR optionnel
-4. **UI Primitives** (lignes 58-61) : Btn, Input, SectionCard
-5. **Editeurs** (lignes 63-155) : TagEditor, BookendEditor, StepsEditor
-6. **Preview** (lignes 157-299) : BookendPanel, PosterPreview (element `data-poster-root`)
-7. **Default data** (lignes 301-350) : donnees par defaut avec exemple
-8. **App principal** (lignes 352-500) : state, exports, sidebar tabs, layout
+1. **Constantes** : TAG_TYPES, TAG_COLORS, FORMATS, MM_PX, ZONE_COLORS, lerpColor, getZoneColor, PALETTES
+2. **QRCodeSVG** : QR codes en SVG natif via `qrcode` lib
+3. **Tag / TagWithQR** : badges de tags avec QR optionnel
+4. **UI Primitives** : Btn, Input, SectionCard
+5. **Editeurs** : TagEditor, BookendEditor, StepsEditor, LineEditor
+6. **Plan technique** : TechnicalPlanEditor (sidebar) + TechnicalPlanPreview (poster)
+7. **Preview affiche** : BookendPanel, PosterPreview (element `data-poster-root`)
+8. **Default data** : emptyData(), defaultData()
+9. **App principal** : state, exports, sidebar tabs, layout
+
+## Modele de donnees — Affiche technique
+
+`data.technicalPlan` contient :
+```js
+{
+  views: [
+    { id: 'top', label: 'Vue de dessus', imageDataUrl: null,
+      stepZones: [{ id, stepIndex, x, y, w, h }],   // coordonnees en % de l'image
+      machineLabels: [{ id, lineIndex, x, y }] },    // position en %
+    { id: 'side', label: 'Vue de côté', ... }
+  ]
+}
+```
+- **stepZones** : rectangles liés à une étape (couleur = getZoneColor)
+- **machineLabels** : lettres liées à une machine de la Ligne
 
 ## Modele de donnees
 
