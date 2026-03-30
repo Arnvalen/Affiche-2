@@ -845,75 +845,26 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
 /* ═══════════════════ TECHNICAL PLAN COMPONENTS ═══════════════════ */
 
 /**
- * Éditeur de plan technique (onglet "Plan" de la sidebar).
+ * Sidebar de l'onglet "Plan" : import images, sélection outil/étape/machine, liste annotations.
+ * Le dessin se fait directement dans l'aperçu (TechnicalPlanPreview en mode interactif).
  * Permet d'importer des images de plan, de dessiner des zones d'étapes (rectangles)
  * et de placer des lettres de machines par clic.
  */
-const TechnicalPlanEditor = ({ data, up }) => {
+const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, setPlanSelStep, planSelMachine, setPlanSelMachine }) => {
   const [activeView, setActiveView] = useState(0);
-  const [tool, setTool] = useState('zone');         // 'zone' | 'machine'
-  const [selStep, setSelStep] = useState(0);
-  const [selMachine, setSelMachine] = useState(0);
-  const [drawing, setDrawing] = useState(null);     // { x, y } point de départ (en %)
-  const [currentRect, setCurrentRect] = useState(null); // { x, y, w, h } rectangle en cours
-  const imgContainerRef = useRef();
   const imgInputRefs = [useRef(), useRef()];
 
-  const pal = getPalette(data.palette);
   const tp = data.technicalPlan || { views:[
     { id:"top",label:"Vue de dessus",imageDataUrl:null,stepZones:[],machineLabels:[] },
     { id:"side",label:"Vue de côté",imageDataUrl:null,stepZones:[],machineLabels:[] },
   ]};
-  const view = tp.views[activeView];
+  const view = tp.views[activeView] || { stepZones:[], machineLabels:[] };
   const steps = data.steps || [];
   const line = data.line || [];
   const icons = data.icons || [];
+  const pal = getPalette(data.palette);
   const totalSteps = steps.length;
 
-  const getRelPos = (e) => {
-    const el = imgContainerRef.current;
-    if (!el) return { x:0, y:0 };
-    const rect = el.getBoundingClientRect();
-    return {
-      x: Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100)),
-      y: Math.max(0, Math.min(100, (e.clientY - rect.top) / rect.height * 100)),
-    };
-  };
-
-  const handleMouseDown = (e) => {
-    if (!view.imageDataUrl || tool !== 'zone') return;
-    e.preventDefault();
-    const pos = getRelPos(e);
-    setDrawing(pos);
-    setCurrentRect(null);
-  };
-  const handleMouseMove = (e) => {
-    if (!drawing) return;
-    const pos = getRelPos(e);
-    setCurrentRect({
-      x: Math.min(drawing.x, pos.x), y: Math.min(drawing.y, pos.y),
-      w: Math.abs(pos.x - drawing.x), h: Math.abs(pos.y - drawing.y),
-    });
-  };
-  const handleMouseUp = (e) => {
-    if (!drawing) return;
-    const pos = getRelPos(e);
-    const x = Math.min(drawing.x, pos.x), y = Math.min(drawing.y, pos.y);
-    const w = Math.abs(pos.x - drawing.x), h = Math.abs(pos.y - drawing.y);
-    setDrawing(null); setCurrentRect(null);
-    if (w < 1 || h < 1) return;
-    up(d => {
-      const v = d.technicalPlan.views[activeView];
-      v.stepZones.push({ id:uid(), stepIndex:selStep, x, y, w, h });
-    });
-  };
-  const handleClick = (e) => {
-    if (!view.imageDataUrl || tool !== 'machine' || drawing) return;
-    const pos = getRelPos(e);
-    up(d => {
-      d.technicalPlan.views[activeView].machineLabels.push({ id:uid(), lineIndex:selMachine, x:pos.x, y:pos.y });
-    });
-  };
   const handleImgFile = (vi) => (e) => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
@@ -932,33 +883,32 @@ const TechnicalPlanEditor = ({ data, up }) => {
 
       {/* Import image */}
       <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
+        <div style={{ fontSize:11,fontWeight:600,color:"#666",marginBottom:6 }}>Image — {tp.views[activeView]?.label}</div>
         <input ref={imgInputRefs[activeView]} type="file" accept="image/*" onChange={handleImgFile(activeView)} style={{ fontSize:11 }} />
         {view.imageDataUrl && <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.technicalPlan.views[activeView].imageDataUrl=null;})} style={{ marginTop:6 }}>Supprimer l'image</Btn>}
       </div>
 
-      {/* Zone d'édition interactive */}
-      {view.imageDataUrl && (<>
-        {/* Sélecteur d'outil */}
+      {/* Outil actif — le dessin se fait dans l'aperçu → */}
+      <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
+        <div style={{ fontSize:11,fontWeight:600,color:"#666",marginBottom:6 }}>Outil (dessiner dans l'aperçu →)</div>
         <div style={{ display:"flex",gap:6 }}>
-          {[['zone','Zone étape'],['machine','Lettre machine']].map(([k,l])=>(
-            <button key={k} onClick={()=>setTool(k)} style={{ flex:1,padding:"5px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:tool===k?"2px solid #1565C0":"1.5px solid #ddd",background:tool===k?"#E3F2FD":"#fff",color:tool===k?"#1565C0":"#666" }}>{l}</button>
+          {[['zone','⬜ Zone étape'],['machine','⬤ Lettre machine']].map(([k,l])=>(
+            <button key={k} onClick={()=>setPlanTool(k)} style={{ flex:1,padding:"5px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:planTool===k?"2px solid #1565C0":"1.5px solid #ddd",background:planTool===k?"#E3F2FD":"#fff",color:planTool===k?"#1565C0":"#666" }}>{l}</button>
           ))}
         </div>
-
-        {/* Sélection de l'étape ou de la machine */}
-        {tool === 'zone' && steps.length > 0 && (
-          <div>
-            <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Étape à annoter</label>
-            <select value={selStep} onChange={e=>setSelStep(parseInt(e.target.value))}
+        {planTool === 'zone' && steps.length > 0 && (
+          <div style={{ marginTop:8 }}>
+            <label style={{ fontSize:11,color:"#666" }}>Étape à annoter</label>
+            <select value={planSelStep} onChange={e=>setPlanSelStep(parseInt(e.target.value))}
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
               {steps.map((s,i)=><option key={s.id} value={i}>{i+1}. {s.title||"(sans titre)"}</option>)}
             </select>
           </div>
         )}
-        {tool === 'machine' && line.length > 0 && (
-          <div>
-            <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Machine à placer</label>
-            <select value={selMachine} onChange={e=>setSelMachine(parseInt(e.target.value))}
+        {planTool === 'machine' && line.length > 0 && (
+          <div style={{ marginTop:8 }}>
+            <label style={{ fontSize:11,color:"#666" }}>Machine à placer</label>
+            <select value={planSelMachine} onChange={e=>setPlanSelMachine(parseInt(e.target.value))}
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
               {line.map((item,i)=>{
                 const icon=(icons||[]).find(ic=>ic.id===item.iconId);
@@ -967,105 +917,53 @@ const TechnicalPlanEditor = ({ data, up }) => {
             </select>
           </div>
         )}
-        {tool === 'zone' && steps.length === 0 && (
-          <div style={{ fontSize:11,color:"#999",padding:8,background:"#f5f5f5",borderRadius:6 }}>Ajoute des étapes dans l'onglet Process pour pouvoir annoter des zones.</div>
-        )}
-        {tool === 'machine' && line.length === 0 && (
-          <div style={{ fontSize:11,color:"#999",padding:8,background:"#f5f5f5",borderRadius:6 }}>Ajoute des machines dans l'onglet Ligne pour pouvoir placer des lettres.</div>
-        )}
+        {planTool === 'zone' && steps.length === 0 && <div style={{ fontSize:10,color:"#bbb",marginTop:6 }}>Ajoute des étapes dans l'onglet Process.</div>}
+        {planTool === 'machine' && line.length === 0 && <div style={{ fontSize:10,color:"#bbb",marginTop:6 }}>Ajoute des machines dans l'onglet Ligne.</div>}
+      </div>
 
-        {/* Image annotable */}
-        <div style={{ fontSize:10,color:"#888",padding:"4px 0" }}>
-          {tool==='zone' ? "↙ Cliquer-glisser pour dessiner une zone" : "↙ Cliquer pour placer une lettre"}
-        </div>
-        <div ref={imgContainerRef}
-          style={{ position:"relative",width:"100%",cursor:tool==='zone'?"crosshair":"cell",userSelect:"none",borderRadius:6,overflow:"hidden",border:"1.5px solid #ddd" }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onClick={handleClick}
-        >
-          <img src={view.imageDataUrl} alt="" style={{ width:"100%",display:"block" }} draggable={false} />
-          {/* Overlay SVG pour les annotations */}
-          <svg style={{ position:"absolute",inset:0,width:"100%",height:"100%",overflow:"visible",pointerEvents:"none" }} viewBox="0 0 100 100" preserveAspectRatio="none">
-            {/* Rectangle en cours de dessin */}
-            {currentRect && (() => {
-              const color = totalSteps>0 ? getZoneColor(pal,selStep,totalSteps) : pal.primary;
-              return <rect x={currentRect.x} y={currentRect.y} width={currentRect.w} height={currentRect.h}
-                fill={color} fillOpacity={0.2} stroke={color} strokeWidth={0.5} strokeDasharray="2 1" />;
-            })()}
-            {/* Zones d'étapes existantes */}
-            {view.stepZones.map(z => {
-              const color = getZoneColor(pal, z.stepIndex, totalSteps);
-              const step = steps[z.stepIndex];
-              return (
-                <g key={z.id}>
-                  <rect x={z.x} y={z.y} width={z.w} height={z.h} fill={color} fillOpacity={0.2} stroke={color} strokeWidth={0.5} />
-                  <rect x={z.x} y={z.y} width={Math.min(z.w, 12)} height={5} fill={color} />
-                  <text x={z.x+0.8} y={z.y+3.8} fill="#fff" fontSize={3.5} fontWeight="bold" fontFamily="sans-serif">{z.stepIndex+1}</text>
-                </g>
-              );
-            })}
-            {/* Lettres de machines */}
-            {view.machineLabels.map((m, mi) => {
-              const icon = (icons||[]).find(ic => ic.id === (line[m.lineIndex]||{}).iconId);
-              const letter = String.fromCharCode(65 + m.lineIndex);
-              return (
-                <g key={m.id}>
-                  <circle cx={m.x} cy={m.y} r={3} fill={pal.primary} />
-                  <text x={m.x} y={m.y+1.2} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={3} fontWeight="bold" fontFamily="sans-serif">{letter}</text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-
-        {/* Listes des annotations */}
-        {view.stepZones.length > 0 && (
-          <SectionCard title={`Zones (${view.stepZones.length})`} defaultOpen={false}>
-            {view.stepZones.map((z,i) => {
-              const color = getZoneColor(pal, z.stepIndex, totalSteps);
-              const step = steps[z.stepIndex];
-              return (
-                <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                  <div style={{ width:12,height:12,borderRadius:2,background:color,flexShrink:0 }} />
-                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{z.stepIndex+1}. {step?.title||"?"} <span style={{ color:"#bbb" }}>({z.x.toFixed(0)}% {z.y.toFixed(0)}%)</span></span>
-                  <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-                </div>
-              );
-            })}
-          </SectionCard>
-        )}
-        {view.machineLabels.length > 0 && (
-          <SectionCard title={`Lettres machines (${view.machineLabels.length})`} defaultOpen={false}>
-            {view.machineLabels.map((m,i) => {
-              const icon = (icons||[]).find(ic => ic.id === (line[m.lineIndex]||{}).iconId);
-              const letter = String.fromCharCode(65 + m.lineIndex);
-              return (
-                <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                  <div style={{ width:18,height:18,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,flexShrink:0 }}>{letter}</div>
-                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"} <span style={{ color:"#bbb" }}>({m.x.toFixed(0)}% {m.y.toFixed(0)}%)</span></span>
-                  <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-                </div>
-              );
-            })}
-          </SectionCard>
-        )}
-      </>)}
+      {/* Annotations existantes */}
+      {(view.stepZones.length > 0 || view.machineLabels.length > 0) && (
+        <SectionCard title={`Annotations — ${tp.views[activeView]?.label}`} defaultOpen={true}>
+          {view.stepZones.map((z,i) => {
+            const color = totalSteps>0 ? getZoneColor(pal, z.stepIndex, totalSteps) : "#999";
+            const step = steps[z.stepIndex];
+            return (
+              <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                <div style={{ width:14,height:14,borderRadius:2,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
+                <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
+                <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+              </div>
+            );
+          })}
+          {view.machineLabels.map((m,i) => {
+            const item = line[m.lineIndex];
+            const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
+            const letter = String.fromCharCode(65 + m.lineIndex);
+            return (
+              <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                <div style={{ width:14,height:14,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
+                <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}</span>
+                <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+              </div>
+            );
+          })}
+        </SectionCard>
+      )}
     </div>
   );
 };
 
 /**
- * Rendu de l'affiche technique (poster imprimable).
- * Deux vues (dessus + côté) empilées, chacune avec l'image annotée + légende à droite.
- * Attribut data-poster-root pour la capture export.
+ * Rendu de l'affiche technique (poster imprimable + mode interactif pour annoter).
+ * Style unifié avec PosterPreview : même header, même footer, même palette.
+ * En mode interactif (interactive=true), le dessin se fait directement sur les images.
  */
-const TechnicalPlanPreview = ({ data, appVersion }) => {
+const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSelStep, planSelMachine, onAddZone, onAddLabel }) => {
   const pal = getPalette(data.palette);
   const fmt = data.format === "Personnalisé" ? { w:data.customW||800, h:data.customH||500 } : (FORMATS[data.format] || { w:841, h:594 });
   const posterW = Math.round(fmt.w * MM_PX);
   const posterH = Math.round(fmt.h * MM_PX);
+  const forceH = data.forceFormat;
   const s = (data.fontScale || 7) * 0.15;
   const hh = data.headerHeight || 56;
   const hr = hh / 56, hs = s * hr;
@@ -1074,99 +972,163 @@ const TechnicalPlanPreview = ({ data, appVersion }) => {
   const line = data.line || [];
   const icons = data.icons || [];
   const totalSteps = steps.length;
-  const activeViews = tp.views.filter(v => v.imageDataUrl);
+
+  const [drawing, setDrawing] = useState(null);     // { x, y, vi, selStep } en cours de drag
+  const [currentRect, setCurrentRect] = useState(null);
+  const imgRefs = [useRef(), useRef()];
+
+  const getRelPos = (e, vi) => {
+    const el = imgRefs[vi].current; if (!el) return { x:0, y:0 };
+    const rect = el.getBoundingClientRect();
+    return {
+      x: Math.max(0, Math.min(100, (e.clientX-rect.left)/rect.width*100)),
+      y: Math.max(0, Math.min(100, (e.clientY-rect.top)/rect.height*100)),
+    };
+  };
+
+  useEffect(() => {
+    if (!drawing || !interactive) return;
+    const addZoneFn = onAddZone;
+    const onMove = (e) => {
+      const pos = getRelPos(e, drawing.vi);
+      setCurrentRect({ x:Math.min(drawing.x,pos.x), y:Math.min(drawing.y,pos.y), w:Math.abs(pos.x-drawing.x), h:Math.abs(pos.y-drawing.y) });
+    };
+    const onUp = (e) => {
+      const pos = getRelPos(e, drawing.vi);
+      const x=Math.min(drawing.x,pos.x), y=Math.min(drawing.y,pos.y), w=Math.abs(pos.x-drawing.x), h=Math.abs(pos.y-drawing.y);
+      setDrawing(null); setCurrentRect(null);
+      if (w>=1 && h>=1) addZoneFn(drawing.vi, { stepIndex:drawing.selStep, x, y, w, h });
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  }, [drawing, interactive]);
+
+  const handleMouseDown = (e, vi) => {
+    if (!interactive) return;
+    if (planTool==='zone' && steps.length>0) {
+      e.preventDefault();
+      const pos = getRelPos(e, vi);
+      setDrawing({ ...pos, vi, selStep:planSelStep });
+    } else if (planTool==='machine' && line.length>0) {
+      const pos = getRelPos(e, vi);
+      onAddLabel(vi, { lineIndex:planSelMachine, x:pos.x, y:pos.y });
+    }
+  };
 
   return (
-    <div data-poster-root="1" style={{ width:posterW, minHeight:posterH, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", borderRadius:6, overflow:"visible", boxShadow:"0 2px 16px rgba(0,0,0,0.12)", display:"flex", flexDirection:"column" }}>
-      {/* Header — identique à l'affiche visuelle */}
-      <div style={{ background:pal.primary,color:"#fff",display:"flex",alignItems:"flex-start",padding:`0 ${24*hs}px`,height:hh*s,gap:20*hs,flexShrink:0,paddingTop:4*hs }}>
-        <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*hs,display:"flex",flexDirection:"column",gap:2*hs }}>
-          <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Référence</span>
-          <strong style={{ fontFamily:"monospace",fontSize:24*hs,fontWeight:700 }}>{data.header.reference}</strong>
+    <div data-poster-root="1" style={{ width:posterW, ...(forceH?{height:posterH}:{minHeight:posterH}), fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", borderRadius:6, overflow:forceH?"hidden":"visible", boxShadow:"0 2px 16px rgba(0,0,0,0.12)", display:"flex", flexDirection:"column" }}>
+      {/* Header — identique à PosterPreview */}
+      {(()=>{ return (
+        <div style={{ background:pal.primary,color:"#fff",display:"flex",alignItems:"flex-start",padding:`0 ${24*hs}px`,height:hh*s,gap:20*hs,flexShrink:0,paddingTop:4*hs }}>
+          <div style={{ borderRight:"2px solid rgba(255,255,255,0.3)",paddingRight:20*hs,display:"flex",flexDirection:"column",gap:2*hs }}>
+            <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Référence</span>
+            <strong style={{ fontFamily:"monospace",fontSize:24*hs,fontWeight:700 }}>{data.header.reference}</strong>
+          </div>
+          <div style={{ flex:1,display:"flex",flexDirection:"column",gap:2*hs }}>
+            <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Process — Plan technique</span>
+            <div style={{ fontSize:16*hs,fontWeight:700 }}>{data.header.processName}</div>
+            <div style={{ fontSize:10*hs,opacity:0.85 }}>{data.header.subtitle}</div>
+          </div>
+          {data.header.logoDataUrl ? <img src={data.header.logoDataUrl} alt="" style={{ height:40*hs,objectFit:"contain" }} /> : (
+            <div style={{ textAlign:"right" }}><div style={{ fontSize:22*hs,fontWeight:700,letterSpacing:2 }}>Nexans</div><div style={{ fontSize:7*hs,textTransform:"uppercase",letterSpacing:2,opacity:0.7 }}>Electrify the future</div></div>
+          )}
         </div>
-        <div style={{ flex:1,display:"flex",flexDirection:"column",gap:2*hs }}>
-          <span style={{ fontSize:8*hs,textTransform:"uppercase",letterSpacing:1.5,opacity:0.8 }}>Process</span>
-          <div style={{ fontSize:16*hs,fontWeight:700 }}>{data.header.processName}</div>
-          <div style={{ fontSize:10*hs,opacity:0.85 }}>{data.header.subtitle} — Plan technique</div>
-        </div>
-        {data.header.logoDataUrl ? <img src={data.header.logoDataUrl} alt="" style={{ height:40*hs,objectFit:"contain" }} /> : (
-          <div style={{ textAlign:"right" }}><div style={{ fontSize:22*hs,fontWeight:700,letterSpacing:2 }}>Nexans</div><div style={{ fontSize:7*hs,textTransform:"uppercase",letterSpacing:2,opacity:0.7 }}>Electrify the future</div></div>
-        )}
+      );})()}
+
+      {/* Barre de légende des étapes (style unifié avec la barre legend de PosterPreview) */}
+      <div style={{ display:"flex",alignItems:"center",gap:10*s,padding:`${6*s}px ${24*s}px`,background:"#fafafa",borderBottom:"1px solid #e0e0e0",fontSize:10*s,flexWrap:"wrap",flexShrink:0 }}>
+        <span style={{ fontWeight:600,color:"#757575" }}>Plan technique :</span>
+        {steps.map((st,si)=>{
+          const color=getZoneColor(pal,si,totalSteps);
+          return <span key={st.id} style={{ display:"inline-flex",alignItems:"center",gap:3*s }}>
+            <span style={{ width:14*s,height:14*s,borderRadius:2,background:color,color:"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700 }}>{si+1}</span>
+            <span style={{ color:"#666" }}>{st.title}</span>
+          </span>;
+        })}
+        {interactive && <span style={{ marginLeft:"auto",fontSize:9*s,color:pal.primary,fontWeight:600,fontStyle:"italic" }}>
+          {planTool==='zone' ? `⬜ Cliquer-glisser → Zone étape ${(planSelStep||0)+1}` : `⬤ Cliquer → ${line[planSelMachine]?(String.fromCharCode(65+planSelMachine)):''} Machine`}
+        </span>}
       </div>
 
       {/* Corps : vues empilées */}
-      <div style={{ flex:1,display:"flex",flexDirection:"column",padding:`${10*s}px`,gap:10*s }}>
-        {activeViews.length === 0 && (
+      <div style={{ flex:1,display:"flex",flexDirection:"column",padding:`${10*s}px`,gap:14*s }}>
+        {tp.views.every(v=>!v.imageDataUrl) && (
           <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#bbb",fontSize:14*s,fontStyle:"italic" }}>
-            Importer des images de plan dans l'onglet Plan
+            Importer des images dans l'onglet 📐 Plan
           </div>
         )}
-        {tp.views.map((view, vi) => {
+        {tp.views.map((view,vi) => {
           if (!view.imageDataUrl) return null;
           return (
-            <div key={view.id} style={{ flex:1,display:"flex",gap:8*s,minHeight:0 }}>
+            <div key={view.id} style={{ flex:1,display:"flex",gap:10*s,minHeight:0 }}>
               {/* Image annotée */}
-              <div style={{ flex:3,position:"relative",minWidth:0 }}>
-                <div style={{ fontSize:9*s,fontWeight:700,color:pal.primary,textTransform:"uppercase",letterSpacing:1,marginBottom:3*s }}>{view.label}</div>
-                <div style={{ position:"relative" }}>
-                  <img src={view.imageDataUrl} alt={view.label} style={{ width:"100%",display:"block",borderRadius:4,border:"1px solid #e0e0e0" }} />
-                  <svg style={{ position:"absolute",inset:0,width:"100%",height:"100%",overflow:"visible",pointerEvents:"none" }} viewBox="0 0 100 100" preserveAspectRatio="none">
-                    {view.stepZones.map(z => {
-                      const color = getZoneColor(pal, z.stepIndex, totalSteps);
-                      return (
-                        <g key={z.id}>
-                          <rect x={z.x} y={z.y} width={z.w} height={z.h} fill={color} fillOpacity={0.22} stroke={color} strokeWidth={0.6} />
-                          <rect x={z.x} y={z.y} width={Math.min(z.w,14)} height={5.5} fill={color} />
-                          <text x={z.x+0.8} y={z.y+4} fill="#fff" fontSize={4} fontWeight="bold" fontFamily="Helvetica Neue,Arial,sans-serif">{z.stepIndex+1}</text>
-                        </g>
-                      );
-                    })}
-                    {view.machineLabels.map(m => {
-                      const letter = String.fromCharCode(65 + m.lineIndex);
-                      return (
-                        <g key={m.id}>
-                          <circle cx={m.x} cy={m.y} r={3.5} fill={pal.primary} />
-                          <text x={m.x} y={m.y+0.5} textAnchor="middle" dominantBaseline="middle" fill="#fff" fontSize={3.5} fontWeight="bold" fontFamily="Helvetica Neue,Arial,sans-serif">{letter}</text>
-                        </g>
-                      );
-                    })}
-                  </svg>
+              <div style={{ flex:3,display:"flex",flexDirection:"column",minWidth:0 }}>
+                {/* Label de vue — même style que les headers de zone dans la ligne de prod */}
+                <div style={{ display:"flex",alignItems:"center",gap:6*s,marginBottom:4*s }}>
+                  <div style={{ width:22*s,height:22*s,borderRadius:"50%",background:pal.primary,color:"#fff",fontSize:12*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{vi+1}</div>
+                  <span style={{ fontSize:11*s,fontWeight:700,color:pal.primary,textTransform:"uppercase",letterSpacing:1 }}>{view.label}</span>
+                </div>
+                {/* Conteneur image + overlay annotations */}
+                <div ref={imgRefs[vi]}
+                  style={{ position:"relative",flex:1,cursor:interactive?(planTool==='zone'?'crosshair':'cell'):'default',borderRadius:4*s,border:`1.5px solid ${pal.primary}33`,overflow:"hidden" }}
+                  onMouseDown={interactive ? (e=>handleMouseDown(e,vi)) : undefined}
+                >
+                  <img src={view.imageDataUrl} alt={view.label} style={{ width:"100%",display:"block" }} draggable={false} />
+                  {/* Zones d'étapes — style ligne de production (rounded rect + badge rond) */}
+                  {view.stepZones.map(z => {
+                    const color = getZoneColor(pal,z.stepIndex,totalSteps);
+                    return (
+                      <div key={z.id} style={{ position:"absolute",left:z.x+'%',top:z.y+'%',width:z.w+'%',height:z.h+'%',border:`${Math.max(1.5,2*s)}px solid ${color}`,borderRadius:Math.max(3,6*s),background:color+'22',boxSizing:"border-box",pointerEvents:"none" }}>
+                        <div style={{ position:"absolute",top:-(11*s),left:-(11*s),width:22*s,height:22*s,borderRadius:"50%",background:color,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",flexShrink:0 }}>{z.stepIndex+1}</div>
+                      </div>
+                    );
+                  })}
+                  {/* Lettres machines — style badge ligne de production */}
+                  {view.machineLabels.map(m => {
+                    const letter = String.fromCharCode(65+m.lineIndex);
+                    return (
+                      <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:pal.primary,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)` }}>{letter}</div>
+                    );
+                  })}
+                  {/* Rectangle en cours de dessin */}
+                  {currentRect && drawing?.vi===vi && (()=>{
+                    const color = totalSteps>0 ? getZoneColor(pal,drawing.selStep,totalSteps) : pal.primary;
+                    return <div style={{ position:"absolute",left:currentRect.x+'%',top:currentRect.y+'%',width:currentRect.w+'%',height:currentRect.h+'%',border:`2px dashed ${color}`,background:color+'18',boxSizing:"border-box",pointerEvents:"none" }} />;
+                  })()}
                 </div>
               </div>
 
-              {/* Légende */}
-              <div style={{ flex:1,display:"flex",flexDirection:"column",gap:4*s,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:8*s }}>
-                {/* Étapes annotées dans cette vue */}
-                {view.stepZones.length > 0 && (<>
-                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888",marginBottom:2*s }}>Étapes</div>
-                  {[...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b).map(si => {
-                    const color = getZoneColor(pal, si, totalSteps);
-                    const step = steps[si];
+              {/* Légende — style ligne de production */}
+              <div style={{ flex:1,display:"flex",flexDirection:"column",gap:4*s,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:10*s }}>
+                {view.stepZones.length>0 && (<>
+                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888" }}>Étapes</div>
+                  {[...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b).map(si=>{
+                    const color=getZoneColor(pal,si,totalSteps);
+                    const step=steps[si];
                     return (
                       <div key={si} style={{ display:"flex",alignItems:"center",gap:4*s }}>
-                        <div style={{ width:14*s,height:14*s,borderRadius:2,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700,flexShrink:0 }}>{si+1}</div>
-                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.2,flex:1 }}>{step?.title||"—"}</span>
+                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
+                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.3,flex:1 }}>{step?.title||"—"}</span>
                       </div>
                     );
                   })}
                 </>)}
-                {/* Machines annotées dans cette vue */}
-                {view.machineLabels.length > 0 && (<>
-                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888",marginTop:4*s,marginBottom:2*s }}>Machines</div>
-                  {[...new Set(view.machineLabels.map(m=>m.lineIndex))].sort((a,b)=>a-b).map(li => {
-                    const item = line[li];
-                    const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
-                    const letter = String.fromCharCode(65 + li);
+                {view.machineLabels.length>0 && (<>
+                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888",marginTop:view.stepZones.length?6*s:0 }}>Machines</div>
+                  {[...new Set(view.machineLabels.map(m=>m.lineIndex))].sort((a,b)=>a-b).map(li=>{
+                    const item=line[li]; const icon=(icons||[]).find(ic=>ic.id===(item||{}).iconId);
+                    const letter=String.fromCharCode(65+li);
                     return (
                       <div key={li} style={{ display:"flex",alignItems:"center",gap:4*s }}>
-                        <div style={{ width:14*s,height:14*s,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700,flexShrink:0 }}>{letter}</div>
-                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.2,flex:1 }}>{icon?.name||"—"}</span>
+                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
+                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.3,flex:1 }}>{icon?.name||"—"}</span>
                       </div>
                     );
                   })}
                 </>)}
-                {view.stepZones.length === 0 && view.machineLabels.length === 0 && (
-                  <div style={{ fontSize:9*s,color:"#bbb",fontStyle:"italic" }}>Aucune annotation</div>
+                {view.stepZones.length===0 && view.machineLabels.length===0 && (
+                  <div style={{ fontSize:9*s,color:"#bbb",fontStyle:"italic",marginTop:4*s }}>Aucune annotation</div>
                 )}
               </div>
             </div>
@@ -1174,7 +1136,7 @@ const TechnicalPlanPreview = ({ data, appVersion }) => {
         })}
       </div>
 
-      {/* Footer */}
+      {/* Footer — identique à PosterPreview */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.footer,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
         <span><strong style={{ color:"#fff" }}>Version :</strong> {data.version || '—'}</span>
         <span><strong style={{ color:"#fff" }}>Format :</strong> {data.format} · {fmt.w}×{fmt.h}mm · Plan technique</span>
@@ -1207,6 +1169,9 @@ export default function App() {
   const [electronLib, setElectronLib] = useState(null); // { path } si library Electron détectée
   const [appVersion, setAppVersion] = useState(null);  // version depuis l'API Electron
   const [previewMode, setPreviewMode] = useState('poster'); // 'poster' | 'plan'
+  const [planTool, setPlanTool] = useState('zone');         // 'zone' | 'machine'
+  const [planSelStep, setPlanSelStep] = useState(0);
+  const [planSelMachine, setPlanSelMachine] = useState(0);
   const [saveModal, setSaveModal] = useState(null);     // { defaultName, onConfirm } ou null
   const [saveModalInput, setSaveModalInput] = useState('');
   const [versionNotice, setVersionNotice] = useState(null); // version du doc chargé si ≠ appVersion
@@ -1556,10 +1521,20 @@ ${xhtml}
             {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={steps=>up(d=>{d.steps=steps;})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
             {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps} onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})} libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
-            {tab === "plan" && <TechnicalPlanEditor data={data} up={up} />}
+            {tab === "plan" && <TechnicalPlanEditor data={data} up={up} planTool={planTool} setPlanTool={setPlanTool} planSelStep={planSelStep} setPlanSelStep={setPlanSelStep} planSelMachine={planSelMachine} setPlanSelMachine={setPlanSelMachine} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Exports :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel (Illustrator / Inkscape)<br/>• <strong>PNG</strong> — Image haute résolution<br/>• <strong>PDF</strong> — Document imprimable</div>
+                {/* Choix de ce qui est exporté */}
+                <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
+                  <div style={{ fontSize:11,fontWeight:600,color:"#666",marginBottom:6 }}>Exporter :</div>
+                  <div style={{ display:"flex",gap:6 }}>
+                    {[['poster','🗂 Affiche visuelle'],['plan','📐 Plan technique']].map(([k,l])=>(
+                      <button key={k} onClick={()=>setPreviewMode(k)} style={{ flex:1,padding:"6px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:previewMode===k?"2px solid #C8102E":"1.5px solid #ddd",background:previewMode===k?"#FFF5F5":"#fff",color:previewMode===k?"#C8102E":"#666" }}>{l}</button>
+                    ))}
+                  </div>
+                  <div style={{ fontSize:10,color:"#999",marginTop:4 }}>L'export capture ce qui est affiché dans l'aperçu.</div>
+                </div>
+                <div style={{ padding:12,background:"#f5f5f5",borderRadius:8,fontSize:11,color:"#666",lineHeight:1.6 }}><strong style={{ color:"#424242" }}>Formats :</strong><br/>• <strong>JSON</strong> — Sauvegarde ré-importable<br/>• <strong>SVG</strong> — Vectoriel (Illustrator / Inkscape)<br/>• <strong>PNG</strong> — Image haute résolution<br/>• <strong>PDF</strong> — Document imprimable</div>
                 <Btn onClick={exportJSON}>↓ Exporter JSON</Btn>
                 <Btn onClick={exportSVG} color="#E87722">↓ Exporter SVG</Btn>
                 <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
@@ -1663,7 +1638,11 @@ ${xhtml}
           <span style={{ fontSize:10,color:"#aaa",marginLeft:"auto" }}>{data.header.reference} — {data.format}{appVersion ? ` — v${appVersion}` : ''}</span>
         </div>
         {/* Poster / Plan technique rendu à taille réelle puis réduit par transform: scale() */}
-        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}>{previewMode==='plan' ? <TechnicalPlanPreview data={data} appVersion={appVersion} /> : <PosterPreview data={data} appVersion={appVersion} />}</div></div>;})()}
+        {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}>{previewMode==='plan'
+  ? <TechnicalPlanPreview data={data} appVersion={appVersion} interactive={true} planTool={planTool} planSelStep={planSelStep} planSelMachine={planSelMachine}
+      onAddZone={(vi,zone)=>up(d=>{d.technicalPlan.views[vi].stepZones.push({id:uid(),...zone});})}
+      onAddLabel={(vi,label)=>up(d=>{d.technicalPlan.views[vi].machineLabels.push({id:uid(),...label});})} />
+  : <PosterPreview data={data} appVersion={appVersion} />}</div></div>;})()}
       </div>
       {/* Styles d'impression : masque la sidebar et supprime le scaling pour imprimer le poster en taille réelle */}
       <style>{`@media print{body>div>div:first-child,[style*="borderBottom"]{display:none!important}[style*="overflow: auto"]{overflow:visible!important;padding:0!important;background:white!important}[style*="transform"]{transform:none!important}}`}</style>
