@@ -912,7 +912,12 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
               {line.map((item,i)=>{
                 const icon=(icons||[]).find(ic=>ic.id===item.iconId);
-                return <option key={item.id} value={i}>{String.fromCharCode(65+i)} — {icon?.name||"Machine"}</option>;
+                const zoneItems = line.filter(m => m.stepId === item.stepId);
+                const idx = zoneItems.findIndex(m => m.id === item.id);
+                const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
+                const step = steps.find(s => s.id === item.stepId);
+                const zoneLabel = step ? ` [${step.title}]` : ' [sans zone]';
+                return <option key={item.id} value={i}>{letter}{zoneLabel} — {icon?.name||"Machine"}</option>;
               })}
             </select>
           </div>
@@ -983,12 +988,18 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   const icons = data.icons || [];
   const totalSteps = steps.length;
 
-  // Couleur d'une machine = couleur de l'étape à laquelle elle est liée (comme PosterPreview.getMachineInfo)
-  const getMachinePlanColor = (lineIndex) => {
+  // Lettre et couleur d'une machine = relatives à sa zone (stepId), comme getMachineInfo dans PosterPreview.
+  // Deux machines dans deux zones différentes peuvent avoir la même lettre.
+  const getMachinePlanInfo = (lineIndex) => {
     const item = line[lineIndex];
-    if (!item || !item.stepId) return pal.primary;
-    const si = steps.findIndex(s => s.id === item.stepId);
-    return si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
+    if (!item) return { letter:'?', color:pal.primary };
+    const zoneItems = line.filter(m => m.stepId === item.stepId);
+    const idx = zoneItems.findIndex(m => m.id === item.id);
+    const si = item.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+    return {
+      letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?',
+      color: si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary,
+    };
   };
 
   const [drawing, setDrawing] = useState(null);     // { x, y, vi, selStep } en cours de drag
@@ -1082,9 +1093,8 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
             <div key={view.id} style={{ flex:1,display:"flex",gap:10*s,minHeight:0 }}>
               {/* Image annotée */}
               <div style={{ flex:3,display:"flex",flexDirection:"column",minWidth:0 }}>
-                {/* Label de vue — même style que les headers de zone dans la ligne de prod */}
+                {/* Label de vue */}
                 <div style={{ display:"flex",alignItems:"center",gap:6*s,marginBottom:4*s }}>
-                  <div style={{ width:22*s,height:22*s,borderRadius:"50%",background:pal.primary,color:"#fff",fontSize:12*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0 }}>{vi+1}</div>
                   <span style={{ fontSize:11*s,fontWeight:700,color:pal.primary,textTransform:"uppercase",letterSpacing:1 }}>{view.label}</span>
                 </div>
                 {/* Conteneur image + overlay annotations */}
@@ -1098,7 +1108,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                     const color = getZoneColor(pal,z.stepIndex,totalSteps);
                     const step = steps[z.stepIndex];
                     const badgeContent = tp.zoneLabel === 'text'
-                      ? <span style={{ fontSize:Math.max(6,9*s),fontWeight:700,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"90%" }}>{step?.title||String(z.stepIndex+1)}</span>
+                      ? <span style={{ fontSize:Math.max(6,9*s),fontWeight:700,whiteSpace:"nowrap" }}>{step?.title||String(z.stepIndex+1)}</span>
                       : <span style={{ fontSize:Math.max(8,13*s),fontWeight:700,fontFamily:"monospace" }}>{z.stepIndex+1}</span>;
                     const badgeW = tp.zoneLabel === 'text' ? 'auto' : 22*s;
                     const badgePad = tp.zoneLabel === 'text' ? `0 ${Math.max(4,6*s)}px` : 0;
@@ -1108,10 +1118,9 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                       </div>
                     );
                   })}
-                  {/* Lettres machines — style badge ligne de production, couleur = étape liée */}
+                  {/* Lettres machines — lettre et couleur relatives à la zone (stepId) */}
                   {view.machineLabels.map(m => {
-                    const letter = String.fromCharCode(65+m.lineIndex);
-                    const mColor = getMachinePlanColor(m.lineIndex);
+                    const { letter, color:mColor } = getMachinePlanInfo(m.lineIndex);
                     return (
                       <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:mColor,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)` }}>{letter}</div>
                     );
@@ -1143,8 +1152,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                   <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888",marginTop:view.stepZones.length?6*s:0 }}>Machines</div>
                   {[...new Set(view.machineLabels.map(m=>m.lineIndex))].sort((a,b)=>a-b).map(li=>{
                     const item=line[li]; const icon=(icons||[]).find(ic=>ic.id===(item||{}).iconId);
-                    const letter=String.fromCharCode(65+li);
-                    const mColor = getMachinePlanColor(li);
+                    const { letter, color:mColor } = getMachinePlanInfo(li);
                     return (
                       <div key={li} style={{ display:"flex",alignItems:"center",gap:4*s }}>
                         <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
