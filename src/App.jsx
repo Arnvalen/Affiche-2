@@ -910,15 +910,22 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
             <label style={{ fontSize:11,color:"#666" }}>Machine à placer</label>
             <select value={planSelMachine} onChange={e=>setPlanSelMachine(parseInt(e.target.value))}
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
-              {line.map((item,i)=>{
-                const icon=(icons||[]).find(ic=>ic.id===item.iconId);
-                const zoneItems = line.filter(m => m.stepId === item.stepId);
-                const idx = zoneItems.findIndex(m => m.id === item.id);
-                const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
-                const step = steps.find(s => s.id === item.stepId);
-                const zoneLabel = step ? ` [${step.title}]` : ' [sans zone]';
-                return <option key={item.id} value={i}>{letter}{zoneLabel} — {icon?.name||"Machine"}</option>;
-              })}
+              {(()=>{
+                // Trier par stepIndex (ordre des étapes) puis par lettre dans la zone
+                const sorted = line.map((item,i)=>{
+                  const step = steps.find(s => s.id === item.stepId);
+                  const si = step ? steps.indexOf(step) : Infinity;
+                  const zoneItems = line.filter(m => m.stepId === item.stepId);
+                  const idx = zoneItems.findIndex(m => m.id === item.id);
+                  const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
+                  return { item, i, si, idx, letter, step };
+                }).sort((a,b) => a.si !== b.si ? a.si - b.si : a.idx - b.idx);
+                return sorted.map(({ item, i, letter, step }) => {
+                  const icon = (icons||[]).find(ic=>ic.id===item.iconId);
+                  const zoneLabel = step ? step.title : 'sans zone';
+                  return <option key={item.id} value={i}>{zoneLabel} — {letter} · {icon?.name||"Machine"}</option>;
+                });
+              })()}
             </select>
           </div>
         )}
