@@ -1133,37 +1133,52 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                 </div>
               </div>
 
-              {/* Légende — style ligne de production */}
-              <div style={{ flex:1,display:"flex",flexDirection:"column",gap:4*s,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:10*s }}>
-                {view.stepZones.length>0 && (<>
-                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888" }}>Étapes</div>
-                  {[...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b).map(si=>{
-                    const color=getZoneColor(pal,si,totalSteps);
-                    const step=steps[si];
+              {/* Légende — organisée par zone */}
+              <div style={{ flex:1,display:"flex",flexDirection:"column",gap:6*s,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:10*s }}>
+                {(()=>{
+                  // Collecter les step indices présents dans cette vue (zones dessinées)
+                  const zoneIndices = [...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b);
+                  // Machines placées dans cette vue, par stepId
+                  const machinesByStep = {};
+                  view.machineLabels.forEach(m => {
+                    const item = line[m.lineIndex];
+                    const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+                    const key = si >= 0 ? si : '__none__';
+                    if (!machinesByStep[key]) machinesByStep[key] = [];
+                    machinesByStep[key].push(m);
+                  });
+                  // Zones à afficher = union des zones dessinées + zones de machines placées
+                  const allZoneKeys = [...new Set([...zoneIndices, ...Object.keys(machinesByStep).filter(k=>k!=='__none__').map(Number)])].sort((a,b)=>a-b);
+                  if (allZoneKeys.length === 0 && !machinesByStep['__none__']) {
+                    return <div style={{ fontSize:9*s,color:"#bbb",fontStyle:"italic",marginTop:4*s }}>Aucune annotation</div>;
+                  }
+                  return allZoneKeys.map(si => {
+                    const color = getZoneColor(pal, si, totalSteps);
+                    const step = steps[si];
+                    const machines = machinesByStep[si] || [];
                     return (
-                      <div key={si} style={{ display:"flex",alignItems:"center",gap:4*s }}>
-                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
-                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.3,flex:1 }}>{step?.title||"—"}</span>
+                      <div key={si}>
+                        {/* En-tête de zone */}
+                        <div style={{ display:"flex",alignItems:"center",gap:4*s,marginBottom:3*s }}>
+                          <div style={{ width:16*s,height:16*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
+                          <span style={{ fontSize:9*s,fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:0.5 }}>{step?.title||"—"}</span>
+                        </div>
+                        {/* Machines de cette zone */}
+                        {machines.map(m => {
+                          const item = line[m.lineIndex];
+                          const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
+                          const { letter } = getMachinePlanInfo(m.lineIndex);
+                          return (
+                            <div key={m.id} style={{ display:"flex",alignItems:"center",gap:4*s,paddingLeft:8*s,marginBottom:2*s }}>
+                              <div style={{ width:14*s,height:14*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
+                              <span style={{ fontSize:9*s,color:"#444",lineHeight:1.3 }}>{icon?.name||"—"}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
-                  })}
-                </>)}
-                {view.machineLabels.length>0 && (<>
-                  <div style={{ fontSize:8*s,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:"#888",marginTop:view.stepZones.length?6*s:0 }}>Machines</div>
-                  {[...new Set(view.machineLabels.map(m=>m.lineIndex))].sort((a,b)=>a-b).map(li=>{
-                    const item=line[li]; const icon=(icons||[]).find(ic=>ic.id===(item||{}).iconId);
-                    const { letter, color:mColor } = getMachinePlanInfo(li);
-                    return (
-                      <div key={li} style={{ display:"flex",alignItems:"center",gap:4*s }}>
-                        <div style={{ width:18*s,height:18*s,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
-                        <span style={{ fontSize:9*s,color:"#333",lineHeight:1.3,flex:1 }}>{icon?.name||"—"}</span>
-                      </div>
-                    );
-                  })}
-                </>)}
-                {view.stepZones.length===0 && view.machineLabels.length===0 && (
-                  <div style={{ fontSize:9*s,color:"#bbb",fontStyle:"italic",marginTop:4*s }}>Aucune annotation</div>
-                )}
+                  });
+                })()}
               </div>
             </div>
           );
