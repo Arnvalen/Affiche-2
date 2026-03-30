@@ -43,58 +43,70 @@ const MM_PX = 1.4;
 /** Palette de couleurs pour les zones de la ligne de production (indexée par position du step) */
 const ZONE_COLORS = ["#1565C0","#00838F","#E65100","#6A1B9A","#AD1457","#F57F17","#4E342E","#37474F"];
 
+/** Interpolation linéaire entre deux couleurs hex */
+const lerpColor = (a, b, t) => {
+  const h = s => parseInt(s, 16);
+  const [ar,ag,ab] = [h(a.slice(1,3)),h(a.slice(3,5)),h(a.slice(5,7))];
+  const [br,bg,bb] = [h(b.slice(1,3)),h(b.slice(3,5)),h(b.slice(5,7))];
+  const mix = (x,y) => Math.round(x*(1-t)+y*t).toString(16).padStart(2,'0');
+  return `#${mix(ar,br)}${mix(ag,bg)}${mix(ab,bb)}`;
+};
+/** Couleur de zone calculée par dégradé entre pal.zoneFrom et pal.zoneTo */
+const getZoneColor = (pal, index, total) =>
+  lerpColor(pal.zoneFrom, pal.zoneTo, total <= 1 ? 0 : index / (total - 1));
+
 /** Thèmes de couleurs disponibles pour le poster */
 const PALETTES = [
   { id:"nexans",     name:"Nexans Classic", primary:"#C8102E", accent:"#E87722", footer:"#212121",
     entreeH:"#2E7D32", entreeB:"#E8F5E9", entreeBr:"#A5D6A7",
     sortieH:"#9B0D23", sortieB:"#FFEBEE", sortieBr:"#EF9A9A",
     cp:{bg:"#E3F2FD",br:"#90CAF9",tx:"#1565C0"},
-    zones:["#1565C0","#00838F","#E65100","#6A1B9A","#AD1457","#F57F17","#4E342E","#37474F"] },
+    zoneFrom:"#C8102E", zoneTo:"#1565C0" },
   { id:"cobalt",     name:"Cobalt Pro",     primary:"#1565C0", accent:"#0288D1", footer:"#0A1929",
     entreeH:"#00695C", entreeB:"#E0F2F1", entreeBr:"#80CBC4",
     sortieH:"#AD1457", sortieB:"#FCE4EC", sortieBr:"#F48FB1",
     cp:{bg:"#E8EAF6",br:"#7986CB",tx:"#283593"},
-    zones:["#283593","#00695C","#AD1457","#E65100","#4527A0","#00838F","#6D4C41","#37474F"] },
+    zoneFrom:"#0D47A1", zoneTo:"#0097A7" },
   { id:"graphite",   name:"Graphite",       primary:"#37474F", accent:"#607D8B", footer:"#102027",
     entreeH:"#2E7D32", entreeB:"#E8F5E9", entreeBr:"#A5D6A7",
     sortieH:"#B71C1C", sortieB:"#FFEBEE", sortieBr:"#EF9A9A",
     cp:{bg:"#ECEFF1",br:"#78909C",tx:"#37474F"},
-    zones:["#37474F","#1B5E20","#B71C1C","#4527A0","#E65100","#00695C","#6D4C41","#F57F17"] },
+    zoneFrom:"#263238", zoneTo:"#90A4AE" },
   { id:"foret",      name:"Forêt",          primary:"#2E7D32", accent:"#558B2F", footer:"#1A2E1B",
     entreeH:"#1565C0", entreeB:"#E3F2FD", entreeBr:"#90CAF9",
     sortieH:"#BF360C", sortieB:"#FBE9E7", sortieBr:"#FFAB91",
     cp:{bg:"#F1F8E9",br:"#AED581",tx:"#33691E"},
-    zones:["#2E7D32","#1565C0","#BF360C","#6A1B9A","#00695C","#F57F17","#4E342E","#37474F"] },
+    zoneFrom:"#1B5E20", zoneTo:"#00897B" },
   { id:"ocean",      name:"Océan",          primary:"#006064", accent:"#00ACC1", footer:"#002F35",
     entreeH:"#1565C0", entreeB:"#E3F2FD", entreeBr:"#90CAF9",
     sortieH:"#AD1457", sortieB:"#FCE4EC", sortieBr:"#F48FB1",
     cp:{bg:"#E0F7FA",br:"#80DEEA",tx:"#00838F"},
-    zones:["#006064","#00838F","#1565C0","#6A1B9A","#2E7D32","#E65100","#37474F","#AD1457"] },
+    zoneFrom:"#004D40", zoneTo:"#0277BD" },
   { id:"soleil",     name:"Soleil",         primary:"#F57F17", accent:"#FDD835", footer:"#3E2723",
     entreeH:"#2E7D32", entreeB:"#E8F5E9", entreeBr:"#A5D6A7",
     sortieH:"#BF360C", sortieB:"#FBE9E7", sortieBr:"#FFAB91",
     cp:{bg:"#FFFDE7",br:"#FDD835",tx:"#F57F17"},
-    zones:["#E65100","#F57F17","#2E7D32","#1565C0","#6A1B9A","#37474F","#AD1457","#00695C"] },
+    zoneFrom:"#BF360C", zoneTo:"#F9A825" },
   { id:"aubergine",  name:"Aubergine",      primary:"#4A148C", accent:"#AB47BC", footer:"#1A0030",
     entreeH:"#00695C", entreeB:"#E0F2F1", entreeBr:"#80CBC4",
     sortieH:"#AD1457", sortieB:"#FCE4EC", sortieBr:"#F48FB1",
     cp:{bg:"#F3E5F5",br:"#CE93D8",tx:"#6A1B9A"},
-    zones:["#4A148C","#6A1B9A","#AD1457","#1565C0","#00695C","#E65100","#4E342E","#37474F"] },
+    zoneFrom:"#4A148C", zoneTo:"#C62828" },
   { id:"sakura",     name:"Sakura",         primary:"#AD1457", accent:"#F06292", footer:"#4A0D2D",
     entreeH:"#2E7D32", entreeB:"#E8F5E9", entreeBr:"#A5D6A7",
     sortieH:"#880E4F", sortieB:"#FCE4EC", sortieBr:"#F48FB1",
     cp:{bg:"#FCE4EC",br:"#F48FB1",tx:"#AD1457"},
-    zones:["#AD1457","#880E4F","#D81B60","#6A1B9A","#1565C0","#2E7D32","#E65100","#37474F"] },
+    zoneFrom:"#880E4F", zoneTo:"#4527A0" },
   { id:"terracotta", name:"Terracotta",     primary:"#6D4C41", accent:"#FF7043", footer:"#3E2723",
     entreeH:"#4E342E", entreeB:"#EFEBE9", entreeBr:"#BCAAA4",
     sortieH:"#BF360C", sortieB:"#FBE9E7", sortieBr:"#FFAB91",
     cp:{bg:"#FBE9E7",br:"#FFAB91",tx:"#BF360C"},
-    zones:["#6D4C41","#BF360C","#E65100","#F57F17","#2E7D32","#37474F","#4A148C","#00695C"] },
+    zoneFrom:"#4E342E", zoneTo:"#FF7043" },
   { id:"minuit",     name:"Minuit",         primary:"#0D1B4B", accent:"#C9A84C", footer:"#060D26",
     entreeH:"#0D4B2C", entreeB:"#E8F5E9", entreeBr:"#A5D6A7",
     sortieH:"#4B0D0D", sortieB:"#FFEBEE", sortieBr:"#EF9A9A",
     cp:{bg:"#E8EEFF",br:"#9BB0FF",tx:"#0D1B4B"},
-    zones:["#0D1B4B","#0D4B2C","#4B0D0D","#2D0D4B","#0D3D4B","#4B3B0D","#1B4B2C","#37474F"] },
+    zoneFrom:"#0D1B4B", zoneTo:"#C9A84C" },
 ];
 const getPalette = id => PALETTES.find(p => p.id === id) || PALETTES[0];
 
@@ -359,11 +371,11 @@ const PosterPreview = ({ data, appVersion }) => {
     const zoneItems = (data.line||[]).filter(m => m.stepId === item.stepId);
     const idx = zoneItems.findIndex(m => m.id === lineItemId);
     const si2 = item.stepId ? data.steps.findIndex(s => s.id === item.stepId) : -1;
-    return { letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?', color: si2 >= 0 ? pal.zones[si2 % pal.zones.length] : '#9E9E9E' };
+    return { letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?', color: si2 >= 0 ? getZoneColor(pal, si2, totalSteps) : '#9E9E9E' };
   };
 
   const renderStep = (step, si) => {
-    const zc = pal.zones[si%pal.zones.length];
+    const zc = getZoneColor(pal, si, totalSteps);
     return (
     <div key={step.id} style={{ flex:"1 1 0%",minWidth:0,borderRadius:8,overflow:"hidden",display:"flex",flexDirection:"column",border:`1.5px solid ${zc}` }}>
       <div style={{ display:"flex",alignItems:"center",gap:8*s,padding:`${7*s}px ${12*s}px`,background:zc,color:"#fff" }}>
@@ -485,7 +497,7 @@ const PosterPreview = ({ data, appVersion }) => {
         // Groupement par zone (ordre data.steps) + non-liés en dernier
         const unlinked=(data.line||[]).filter(m=>!m.stepId);
         const byStep=data.steps.map((st,si)=>({
-          step:st,color:pal.zones[si%pal.zones.length],stepIndex:si,
+          step:st,color:getZoneColor(pal, si, totalSteps),stepIndex:si,
           machines:(data.line||[]).filter(m=>m.stepId===st.id)
         })).filter(z=>z.machines.length>0);
         const zones=[...byStep,...(unlinked.length?[{step:null,color:"#9E9E9E",stepIndex:-1,machines:unlinked}]:[])];
@@ -1096,7 +1108,7 @@ ${xhtml}
                     <div key={p.id} onClick={()=>up(d=>{d.palette=p.id;})} title={p.name}
                       style={{ borderRadius:6,overflow:"hidden",cursor:"pointer",border:sel?"2px solid #212121":"2px solid transparent",boxShadow:sel?"0 0 0 1px #212121":"none" }}>
                       <div style={{ height:16,background:p.primary }} />
-                      <div style={{ height:7,background:p.accent }} />
+                      <div style={{ height:7,background:`linear-gradient(to right,${p.zoneFrom},${p.zoneTo})` }} />
                       <div style={{ fontSize:8,padding:"2px 3px",textAlign:"center",background:"#fafafa",color:"#444",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:sel?700:400 }}>{p.name}</div>
                     </div>
                   );})}
