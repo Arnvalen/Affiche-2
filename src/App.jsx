@@ -951,7 +951,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
             const step = steps[z.stepIndex];
             return (
               <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                <div style={{ width:14,height:14,borderRadius:2,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
+                <div style={{ width:14,height:14,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
                 <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
                 <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
               </div>
@@ -960,10 +960,15 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
           {view.machineLabels.map((m,i) => {
             const item = line[m.lineIndex];
             const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
-            const letter = String.fromCharCode(65 + m.lineIndex);
+            // Lettre et couleur par zone (même logique que getMachinePlanInfo dans TechnicalPlanPreview)
+            const zoneItems = line.filter(li => li.stepId === item?.stepId);
+            const idx = zoneItems.findIndex(li => li.id === item?.id);
+            const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
+            const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+            const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
             return (
               <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                <div style={{ width:14,height:14,borderRadius:"50%",background:pal.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
+                <div style={{ width:14,height:14,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
                 <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}</span>
                 <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
               </div>
