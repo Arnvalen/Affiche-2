@@ -507,15 +507,13 @@ const PosterPreview = ({ data, appVersion }) => {
         const iconH=bh*0.52;
 
         return(
-          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"flex-end",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px`,overflow:"hidden"}}>
+          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"flex-end",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px ${8*s}px`,overflow:"hidden"}}>
             {zones.map((zone,zi)=>(
               <Fragment key={zone.step?.id||"unlinked"}>
                 {/* Séparateur entre zones */}
                 {zi>0&&(
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",flexShrink:0,gap:2*s}}>
-                    <div style={{width:0,height:bh*0.4,borderLeft:"1.5px dashed #ccc"}} />
-                    <span style={{color:pal.accent,fontSize:9*s,fontWeight:700,lineHeight:1}}>→</span>
-                    <div style={{width:0,height:bh*0.4,borderLeft:"1.5px dashed #ccc"}} />
+                  <div style={{display:"flex",alignItems:"flex-end",justifyContent:"center",flexShrink:0,paddingBottom:8*s}}>
+                    <svg width={16*s} height={16*s} viewBox="0 0 24 24" fill={pal.accent} style={{display:"block"}}><path d="M8 5v14l11-7z"/></svg>
                   </div>
                 )}
                 {/* Zone — numéro au-dessus du rectangle arrondi */}
