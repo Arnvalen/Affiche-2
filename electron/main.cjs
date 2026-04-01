@@ -239,7 +239,7 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
 .bar-wrap{width:200px;height:2px;background:#eee;border-radius:1px;
   overflow:hidden;opacity:0;animation:fadeIn .4s ease-out .6s forwards}
 .bar{width:40%;height:100%;background:#C8102E;border-radius:1px;
-  animation:slide 1.4s ease-in-out infinite}
+  animation:slide 3s ease-in-out infinite}
 .credits{position:absolute;bottom:24px;text-align:center;font-size:10px;
   letter-spacing:.3px;line-height:1.9;color:#bbb;opacity:0;
   animation:fadeIn .5s ease-out .8s forwards}
@@ -285,7 +285,7 @@ body{background:#fff;color:#212121;font-family:'Segoe UI',system-ui,sans-serif;
     log('T8 did-finish-load phase=' + phase + ' (+' + (Date.now() - T0) + 'ms)')
     if (phase === 'SPLASH_LOADING') {
       phase = 'SPLASH_VISIBLE'
-      scheduleAppLoad(5000)  // timer 5s depuis que le splash est visible
+      scheduleAppLoad(7000)  // timer 7s depuis que le splash est visible
     } else if (phase === 'APP_LOADING') {
       phase = 'APP_READY'
       win.webContents.executeJavaScript('document.body.style.opacity="1"').catch(() => {})

@@ -489,7 +489,7 @@ const PosterPreview = ({ data, appVersion }) => {
         const hasImg=!!data.backgroundImage;
         if(!hasLine&&!hasImg) return null;
         if(!hasLine) return(
-          <div style={{flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"center",background:"#f0f0f0",height:bh,overflow:"hidden"}}>
+          <div style={{flexShrink:0,width:"100%",display:"flex",justifyContent:"center",alignItems:"flex-end",background:"#f0f0f0",height:bh,overflow:"hidden"}}>
             <img src={data.backgroundImage} alt="" style={{maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block"}} />
           </div>
         );
@@ -507,7 +507,7 @@ const PosterPreview = ({ data, appVersion }) => {
         const iconH=bh*0.52;
 
         return(
-          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"center",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px`,overflow:"hidden"}}>
+          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"flex-end",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px`,overflow:"hidden"}}>
             {zones.map((zone,zi)=>(
               <Fragment key={zone.step?.id||"unlinked"}>
                 {/* Séparateur entre zones */}
@@ -1506,9 +1506,10 @@ ${xhtml}
                 <div style={{ fontSize:10,color:"#999" }}>S'affiche entre le contenu et le footer, sans déformation.</div>
                 <input ref={bgRef} type="file" accept="image/*" onChange={handleImg(bgRef,"bg")} style={{ fontSize:11 }} />
                 {data.backgroundImage && <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.backgroundImage=null;})}>Supprimer</Btn>}
-                {data.backgroundImage && (
+                {(data.backgroundImage || (data.line||[]).length > 0) && (
                   <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
-                    <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Hauteur image bandeau</label>
+                    <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Hauteur de la zone bandeau</label>
+                    <div style={{ fontSize:10,color:"#999",marginBottom:4 }}>Bord inférieur fixe — le bord supérieur monte avec le réglage</div>
                     <div style={{ display:"flex",alignItems:"center",gap:10,marginTop:6 }}><span style={{ fontSize:10,color:"#888" }}>5%</span><input type="range" min="5" max="60" step="1" value={data.bgImageHeight||25} onChange={e=>up(d=>{d.bgImageHeight=parseInt(e.target.value);})} style={{ flex:1,accentColor:"#C8102E" }} /><span style={{ fontSize:10,color:"#888" }}>60%</span></div>
                     <div style={{ fontSize:12,fontWeight:700,color:"#C8102E",marginTop:4 }}>{data.bgImageHeight||25}%</div>
                   </div>
