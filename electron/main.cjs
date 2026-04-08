@@ -24,7 +24,7 @@ let SHARED_LOG = null  // initialisé après résolution de LIBRARY
 function log(msg) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
   try { fs.appendFileSync(LOG_FILE, line) } catch (_) {}
-  if (SHARED_LOG) try { fs.appendFileSync(SHARED_LOG, line) } catch (_) {}
+  if (SHARED_LOG) fs.appendFile(SHARED_LOG, line, () => {})
 }
 process.on('uncaughtException', (e) => { log('FATAL: ' + e.stack); app.quit() })
 
