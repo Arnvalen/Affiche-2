@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "setup:https": "node scripts/setup-cert.mjs",
     "electron:build": "vite build && ELECTRON_RUN_AS_NODE= electron .",
-    "dist:win": "vite build && electron-packager . \"Nexans Affiche\" --platform=win32 --arch=x64 --asar --out=dist-electron --overwrite --ignore=\"^/(?!dist|electron|package\\.json)\" && cp electron/launcher.bat \"dist-electron/Lancer Nexans Affiche.bat\" && powershell -Command \"Get-ChildItem -Path 'dist-electron\\\\Nexans Affiche-win32-x64\\\\locales' | Where-Object { $_.Name -notin @('fr.pak','en-US.pak') } | Remove-Item -Force\" && powershell -Command \"Compress-Archive -Path 'dist-electron\\\\Nexans Affiche-win32-x64','dist-electron\\\\Lancer Nexans Affiche.bat' -DestinationPath dist-electron\\\\NexansAffiche-win-x64.zip -Force\""
+    "dist:win": "vite build && electron-packager . \"Nexans Affiche\" --platform=win32 --arch=x64 --asar --out=dist-electron --overwrite --ignore=\"^/(?!dist|electron|package\\.json)\" && cp electron/launcher.bat \"dist-electron/Lancer Nexans Affiche.bat\" && cp electron/nexans-ascii.txt \"dist-electron/nexans-ascii.txt\" && powershell -Command \"Get-ChildItem -Path 'dist-electron\\\\Nexans Affiche-win32-x64\\\\locales' | Where-Object { $_.Name -notin @('fr.pak','en-US.pak') } | Remove-Item -Force\" && powershell -Command \"Compress-Archive -Path 'dist-electron\\\\Nexans Affiche-win32-x64','dist-electron\\\\Lancer Nexans Affiche.bat','dist-electron\\\\nexans-ascii.txt' -DestinationPath dist-electron\\\\NexansAffiche-win-x64.zip -Force\""
   },
   "dependencies": {
     "html-to-image": "^1.11.13",
