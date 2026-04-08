@@ -4,7 +4,7 @@ set "LOCAL=%LOCALAPPDATA%\NexansAffiche"
 set "SRC=%~dp0Nexans Affiche-win32-x64"
 set "LIBRARY=%~dp0library"
 set "VERSION_FILE=%LOCAL%\.version"
-set "VERSION=1.0.19"
+set "VERSION=1.0.20"
 
 :: Creer le dossier library partage s'il n'existe pas
 if not exist "%LIBRARY%" mkdir "%LIBRARY%"
@@ -20,9 +20,8 @@ if exist "%VERSION_FILE%" (
 if not "%LOCAL_VER%"=="%VERSION%" (
     echo Installation Nexans Affiche v%VERSION%...
     taskkill /F /IM "Nexans Affiche.exe" >nul 2>&1
-    if exist "%LOCAL%" rmdir /s /q "%LOCAL%" >nul 2>&1
-    mkdir "%LOCAL%" >nul 2>&1
-    xcopy /s /e /i /q /y "%SRC%" "%LOCAL%\app" >nul
+    mkdir "%LOCAL%\app" >nul 2>&1
+    robocopy "%SRC%" "%LOCAL%\app" /MIR /NP /NFL /NDL /NJH /NJS >nul
     echo %VERSION%> "%VERSION_FILE%"
     echo Installation terminee.
     echo  Demarrage de l'application en cours, veuillez patienter...

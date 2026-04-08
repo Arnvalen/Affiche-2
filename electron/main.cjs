@@ -68,21 +68,8 @@ if (LIBRARY) {
   }
 }
 
-/* ═══ Pré-chargement des fichiers dist/ en RAM ═══ */
-const FILE_CACHE = {}
-function preloadDist() {
-  const t = Date.now()
-  function walk(dir) {
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const full = path.join(dir, entry.name)
-      if (entry.isDirectory()) walk(full)
-      else FILE_CACHE['/' + path.relative(DIST, full).replace(/\\/g, '/')] = fs.readFileSync(full)
-    }
-  }
-  walk(DIST)
-  log('Preloaded ' + Object.keys(FILE_CACHE).length + ' files in ' + (Date.now() - t) + 'ms')
-}
-preloadDist()
+/* ═══ Cache package.json (version) ═══ */
+const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'))
 
 /* ═══ MIME types ═══ */
 const MIME = {
@@ -106,8 +93,7 @@ function startServer(cb) {
     // ── API Version ──
     if (url === '/__api/version' && req.method === 'GET') {
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
-      const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'))
-      res.end(JSON.stringify({ version: pkg.version }))
+      res.end(JSON.stringify({ version: PKG.version }))
       return
     }
 
@@ -193,15 +179,16 @@ function startServer(cb) {
       return
     }
 
-    // ── Fichiers statiques (depuis le cache RAM) ──
-    const ext = path.extname(url).toLowerCase()
-    const cached = FILE_CACHE[url] || FILE_CACHE['/index.html']
-    res.setHeader('Content-Type', MIME[ext] || MIME['.html'])
-    if (cached) {
-      log('HTTP ' + req.method + ' ' + url + ' -> ' + cached.length + ' bytes (RAM)')
-      res.end(cached)
-    } else {
-      log('HTTP ' + req.method + ' ' + url + ' -> 404 NOT FOUND')
+    // ── Fichiers statiques (lecture à la demande depuis l'ASAR) ──
+    const urlPath = (url === '/' || !path.extname(url)) ? '/index.html' : url
+    const filePath = path.join(DIST, urlPath)
+    const ext = path.extname(urlPath).toLowerCase()
+    try {
+      const content = fs.readFileSync(filePath)
+      res.setHeader('Content-Type', MIME[ext] || 'application/octet-stream')
+      res.end(content)
+    } catch {
+      log('HTTP 404 ' + url)
       res.statusCode = 404
       res.end('Not found')
     }

@@ -13,9 +13,9 @@
  * SVG/PDF qui capturent le DOM directement.
  */
 import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
+import { produce } from "immer";        // Copie structurale pour up() — remplace JSON.parse/stringify
 import QRCode from "qrcode";            // Génération de la matrice QR
-import { toPng } from "html-to-image";  // Capture DOM → PNG via rendu navigateur natif
-import { jsPDF } from "jspdf";          // Création de fichiers PDF
+// html-to-image et jsPDF : chargés dynamiquement à l'export (voir exportPNG/exportPDF)
 
 /* ═══════════════════ CONSTANTS ═══════════════════ */
 
@@ -226,7 +226,7 @@ const TagEditor = ({ tags, onChange }) => {
  * Utilise un clone profond (JSON parse/stringify) pour chaque mutation → immutabilité.
  */
 const BookendEditor = ({ data, onChange }) => {
-  const up = (fn) => { const d = JSON.parse(JSON.stringify(data)); fn(d); onChange(d); };
+  const up = (fn) => { onChange(produce(data, fn)); };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
       <div style={{ marginBottom:6 }}>
@@ -262,7 +262,7 @@ const BookendEditor = ({ data, onChange }) => {
  * Supporte le réordonnement (↑↓) des étapes et des opérations.
  */
 const StepsEditor = ({ steps, onChange, line, icons }) => {
-  const up = (fn) => { const d = JSON.parse(JSON.stringify(steps)); fn(d); onChange(d); };
+  const up = (fn) => { onChange(produce(steps, fn)); };
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
       {steps.map((step, si) => (
@@ -1233,7 +1233,7 @@ export default function App() {
   const [versionNotice, setVersionNotice] = useState(null); // version du doc chargé si ≠ appVersion
 
   /** Mise à jour immutable du state : clone profond → mutation sur le clone → remplacement */
-  const up = useCallback((fn) => setData(prev => { const d = JSON.parse(JSON.stringify(prev)); fn(d); return d; }), []);
+  const up = useCallback((fn) => setData(prev => produce(prev, fn)), []);
 
   useEffect(() => {
     if (window.__T_HTML) console.log('REACT_MOUNT +' + (Date.now() - window.__T_HTML) + 'ms depuis HTML parse');
@@ -1302,6 +1302,7 @@ ${xhtml}
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
     const fmt = data.format === "Personnalisé" ? { w: data.customW || 800, h: data.customH || 500 } : (FORMATS[data.format] || { w: 800, h: 500 });
+    const [{ toPng }, { jsPDF }] = await Promise.all([import('html-to-image'), import('jspdf')]);
     const dataUrl = await toPng(el, { pixelRatio: (data.pdfResolution || 150) / (MM_PX * 25.4) });
     const orientation = fmt.w > fmt.h ? "landscape" : "portrait";
     const doc = new jsPDF({ orientation, unit: "mm", format: [fmt.w, fmt.h] });
@@ -1312,6 +1313,7 @@ ${xhtml}
   const exportPNG = async () => {
     const el = document.querySelector("[data-poster-root]");
     if (!el) return;
+    const { toPng } = await import('html-to-image');
     const dataUrl = await toPng(el, { pixelRatio: (data.pdfResolution || 150) / (MM_PX * 25.4) });
     const a = document.createElement("a");
     const prefix = previewMode === 'plan' ? 'plan' : 'affiche';
