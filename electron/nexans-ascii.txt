@@ -1,20 +1,13 @@
-                  OOOOO                     OOOOOOOOOOO
-               OOOOOOOOOOO                OOOOOOOOOOOOO
-              OOOOOOOOOOOOO             OOOOOOOOOOOOOOO
-             OOOOOO   OOOOOO           OOOOOOO
-            OOOOOO     OOOOOO         OOOOOOO
-            OOOOO      OOOOOO         OOOOOO
-           OOOOOO       OOOOOO        OOOOO
-           OOOOOO       OOOOOO       OOOOOO
-           OOOOOO        OOOOOO      OOOOOO
-           OOOOOO        OOOOOO      OOOOOO
-           OOOOO         OOOOOO      OOOOOO      @@@@@@@@@    @@@@      @@@@    @@@@@@@@@       @@@@@@@@@@        @@@@@@@@@
-           OOOOO          OOOOO      OOOOOO    @@@@@@@@@@@@   @@@@@    @@@@@  @@@@@@@@@@@@@   @@@@@@@@@@@@@@    @@@@@@@@@@@@
-          OOOOOO          OOOOOO     OOOOOO   @@@@@    @@@@@   @@@@@@@@@@@@    @@@     @@@@@  @@@@@     @@@@@  @@@@@     @@
-          OOOOO            OOOOOO    OOOOOO   @@@@@     @@@@@   @@@@@@@@@@             @@@@@  @@@@@     @@@@@  @@@@@@
-         OOOOOO            OOOOOO    OOOOO    @@@@@@@@@@@@@@@     @@@@@@       @@@@@@@@@@@@@  @@@@@     @@@@@   @@@@@@@@@
-         OOOOOO             OOOOOO   OOOOO    @@@@@@@@@@@@@@      @@@@@@     @@@@@@@@@@@@@@@  @@@@@     @@@@@     @@@@@@@@@@
-        OOOOOO              OOOOOO  OOOOOO    @@@@@             @@@@@@@@@@   @@@@@     @@@@@  @@@@@     @@@@@         @@@@@@
-OOOOOOOOOOOOO                OOOOOOOOOOOOO    @@@@@@    @@@    @@@@@@@@@@@@  @@@@@     @@@@@  @@@@@     @@@@@   @@@    @@@@@
-OOOOOOOOOOOO                  OOOOOOOOOOO      @@@@@@@@@@@@@  @@@@@    @@@@@  @@@@@@@@@@@@@@  @@@@@     @@@@@  @@@@@@@@@@@@@
- OOOOOOOO                       OOOOOOO          @@@@@@@@@@   @@@@      @@@@    @@@@@@@@@@     @@@@      @@@@   @@@@@@@@@@
+           OOOOO             OOOOOOOO
+         OOOOOOOOO         OOOOOOOOOO
+        OOOO   OOOO       OOOO
+        OOO    OOOO      OOOO
+       OOOO     OOOO     OOO
+       OOOO     OOOO    OOOO
+       OOOO      OOOO   OOOO
+       OOO       OOOO   OOOO   @@@@@@@@  @@@@  @@@  @@@@@@@@  @@@@@@@@@   @@@@@@@@
+      OOOO        OOO   OOOO   @@@   @@@  @@@@@@@         @@@ @@@@   @@@  @@@
+      OOOO        OOOO  OOOO   @@@@@@@@@   @@@@@    @@@@@@@@@ @@@@   @@@  @@@@@@@
+     OOOO          OOO  OOOO   @@@         @@@@@   @@@    @@@ @@@@   @@@      @@@@
+OOOOOOOO           OOOOOOOO    @@@   @@  @@@@ @@@@ @@@@   @@@ @@@@   @@@  @@   @@@
+OOOOOOO              OOOOO      @@@@@@@  @@@   @@@  @@@@@@@@  @@@    @@@  @@@@@@@
