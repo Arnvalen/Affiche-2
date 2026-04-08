@@ -10,7 +10,7 @@ set "LOCAL=%LOCALAPPDATA%\NexansAffiche"
 set "SRC=%~dp0Nexans Affiche-win32-x64"
 set "LIBRARY=%~dp0library"
 set "VERSION_FILE=%LOCAL%\.version"
-set "VERSION=1.0.20"
+set "VERSION=1.0.21"
 :: ─────────────────────────────────────────────
 
 echo.
