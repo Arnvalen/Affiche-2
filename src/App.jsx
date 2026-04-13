@@ -12,7 +12,7 @@
  * Tous les styles sont inline (objets React) pour simplifier les exports
  * SVG/PDF qui capturent le DOM directement.
  */
-import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
 import { produce } from "immer";        // Copie structurale pour up() — remplace JSON.parse/stringify
 import QRCode from "qrcode";            // Génération de la matrice QR
 // html-to-image et jsPDF : chargés dynamiquement à l'export (voir exportPNG/exportPDF)
@@ -1084,6 +1084,23 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   // | { mode:'drag-arrow-tip', vi, labelId }
   const [interaction, setInteraction] = useState(null);
   const imgRefs = [useRef(), useRef()];
+  const legendRefs = [useRef(), useRef()];
+  const [legendAutoFs, setLegendAutoFs] = useState([null, null]);
+
+  useLayoutEffect(() => {
+    tp.views.forEach((view, vi) => {
+      if (!view.imageDataUrl || !legendRefs[vi]?.current) return;
+      const h = legendRefs[vi].current.getBoundingClientRect().height;
+      if (h <= 0) return;
+      const zoneIndices = [...new Set(view.stepZones.map(z => z.stepIndex))];
+      const rows = zoneIndices.length + view.machineLabels.length + 1;
+      const fs = Math.min(h / rows * 0.45, 18);
+      setLegendAutoFs(prev => {
+        if (Math.abs((prev[vi] || 0) - fs) < 0.5) return prev;
+        const next = [...prev]; next[vi] = fs; return next;
+      });
+    });
+  }, [data, posterH, posterW]);
 
   const getRelPos = (e, vi) => {
     const el = imgRefs[vi].current; if (!el) return { x:0, y:0 };
@@ -1216,7 +1233,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                 </div>
                 {/* Conteneur image + overlay annotations */}
                 <div ref={imgRefs[vi]}
-                  style={{ position:"relative",flex:1,cursor:interactive?(planTool==='zone'?'crosshair':'cell'):'default',borderRadius:4*s,border:`1.5px solid ${pal.primary}33`,overflow:"hidden" }}
+                  style={{ position:"relative",cursor:interactive?(planTool==='zone'?'crosshair':'cell'):'default',borderRadius:4*s,border:`1.5px solid ${pal.primary}33`,overflow:"hidden" }}
                   onMouseDown={interactive ? (e=>handleMouseDown(e,vi)) : undefined}
                   onDoubleClick={interactive ? (e=>handleDoubleClick(e,vi)) : undefined}
                 >
@@ -1330,52 +1347,59 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
               </div>
 
               {/* Légende — organisée par zone */}
-              <div style={{ flex:1,display:"flex",flexDirection:"column",gap:6*s,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:10*s }}>
-                {(()=>{
-                  // Collecter les step indices présents dans cette vue (zones dessinées)
-                  const zoneIndices = [...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b);
-                  // Machines placées dans cette vue, par stepId
-                  const machinesByStep = {};
-                  view.machineLabels.forEach(m => {
-                    const item = line[m.lineIndex];
-                    const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
-                    const key = si >= 0 ? si : '__none__';
-                    if (!machinesByStep[key]) machinesByStep[key] = [];
-                    machinesByStep[key].push(m);
-                  });
-                  // Zones à afficher = union des zones dessinées + zones de machines placées
-                  const allZoneKeys = [...new Set([...zoneIndices, ...Object.keys(machinesByStep).filter(k=>k!=='__none__').map(Number)])].sort((a,b)=>a-b);
-                  if (allZoneKeys.length === 0 && !machinesByStep['__none__']) {
-                    return <div style={{ fontSize:9*s,color:"#bbb",fontStyle:"italic",marginTop:4*s }}>Aucune annotation</div>;
-                  }
-                  return allZoneKeys.map(si => {
-                    const color = getZoneColor(pal, si, totalSteps);
-                    const step = steps[si];
-                    const machines = machinesByStep[si] || [];
-                    return (
-                      <div key={si}>
-                        {/* En-tête de zone */}
-                        <div style={{ display:"flex",alignItems:"center",gap:4*s,marginBottom:3*s }}>
-                          <div style={{ width:16*s,height:16*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
-                          <span style={{ fontSize:9*s,fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:0.5 }}>{step?.title||"—"}</span>
-                        </div>
-                        {/* Machines de cette zone */}
-                        {machines.map(m => {
-                          const item = line[m.lineIndex];
-                          const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
-                          const { letter } = getMachinePlanInfo(m.lineIndex);
-                          return (
-                            <div key={m.id} style={{ display:"flex",alignItems:"center",gap:4*s,paddingLeft:8*s,marginBottom:2*s }}>
-                              <div style={{ width:14*s,height:14*s,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8*s,fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
-                              <span style={{ fontSize:9*s,color:"#444",lineHeight:1.3 }}>{icon?.name||"—"}</span>
+              {(()=>{
+                const afs = legendAutoFs[vi] || (9 * s);
+                return (
+                  <div ref={legendRefs[vi]} style={{ flex:1,display:"flex",flexDirection:"column",gap:afs*0.6,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:afs,overflow:"hidden" }}>
+                    {(()=>{
+                      // Collecter les step indices présents dans cette vue (zones dessinées)
+                      const zoneIndices = [...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b);
+                      // Machines placées dans cette vue, par stepId
+                      const machinesByStep = {};
+                      view.machineLabels.forEach(m => {
+                        const item = line[m.lineIndex];
+                        const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+                        const key = si >= 0 ? si : '__none__';
+                        if (!machinesByStep[key]) machinesByStep[key] = [];
+                        machinesByStep[key].push(m);
+                      });
+                      // Zones à afficher = union des zones dessinées + zones de machines placées
+                      const allZoneKeys = [...new Set([...zoneIndices, ...Object.keys(machinesByStep).filter(k=>k!=='__none__').map(Number)])].sort((a,b)=>a-b);
+                      if (allZoneKeys.length === 0 && !machinesByStep['__none__']) {
+                        return <div style={{ fontSize:afs,color:"#bbb",fontStyle:"italic",marginTop:afs*0.4 }}>Aucune annotation</div>;
+                      }
+                      return allZoneKeys.map(si => {
+                        const color = getZoneColor(pal, si, totalSteps);
+                        const step = steps[si];
+                        const machines = machinesByStep[si] || [];
+                        const circleSize = afs * 1.7;
+                        return (
+                          <div key={si}>
+                            {/* En-tête de zone */}
+                            <div style={{ display:"flex",alignItems:"center",gap:afs*0.45,marginBottom:afs*0.3 }}>
+                              <div style={{ width:circleSize,height:circleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
+                              <span style={{ fontSize:afs,fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:0.5,lineHeight:1.2 }}>{step?.title||"—"}</span>
                             </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
+                            {/* Machines de cette zone */}
+                            {machines.map(m => {
+                              const item = line[m.lineIndex];
+                              const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
+                              const { letter } = getMachinePlanInfo(m.lineIndex);
+                              const mCircleSize = afs * 1.5;
+                              return (
+                                <div key={m.id} style={{ display:"flex",alignItems:"center",gap:afs*0.45,paddingLeft:afs*0.85,marginBottom:afs*0.2 }}>
+                                  <div style={{ width:mCircleSize,height:mCircleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs*0.9),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
+                                  <span style={{ fontSize:afs,color:"#444",lineHeight:1.2 }}>{icon?.name||"—"}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
