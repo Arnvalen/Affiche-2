@@ -12,7 +12,7 @@
  * Tous les styles sont inline (objets React) pour simplifier les exports
  * SVG/PDF qui capturent le DOM directement.
  */
-import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
 import { produce } from "immer";        // Copie structurale pour up() — remplace JSON.parse/stringify
 import QRCode from "qrcode";            // Génération de la matrice QR
 // html-to-image et jsPDF : chargés dynamiquement à l'export (voir exportPNG/exportPDF)
@@ -580,7 +580,7 @@ const emptyData = () => ({
   entree: { tags: [], sections: [] },
   sortie: { tags: [], sections: [] },
   steps: [], backgroundImage: "", icons: [], line: [], version: "",
-  technicalPlan: { zoneLabel:"number", gridSize:5, views: [
+  technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -656,7 +656,7 @@ const defaultData = () => ({
     }
   ],
   line: [], version: "",
-  technicalPlan: { zoneLabel:"number", gridSize:5, views: [
+  technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -986,6 +986,12 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
             <div style={{ fontSize:10,color:"#bbb",marginTop:4 }}>Clics pour placer les sommets. Double-clic ou clic sur le 1er point pour fermer.</div>
           </div>
         )}
+        <div style={{ marginTop:8 }}>
+          <label style={{ fontSize:11,color:"#666" }}>Police légende <strong style={{ color:"#333" }}>{tp.legendFontSize||9}px</strong></label>
+          <input type="range" min={6} max={18} step={1} value={tp.legendFontSize||9}
+            onChange={e=>up(d=>{d.technicalPlan.legendFontSize=Number(e.target.value);})}
+            style={{ width:"100%",marginTop:4,accentColor:"#1565C0" }} />
+        </div>
         {planTool === 'machine' && line.length > 0 && (
           <div style={{ marginTop:8 }}>
             <label style={{ fontSize:11,color:"#666" }}>Mode placement</label>
@@ -1084,23 +1090,6 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   // | { mode:'drag-arrow-tip', vi, labelId }
   const [interaction, setInteraction] = useState(null);
   const imgRefs = [useRef(), useRef()];
-  const legendRefs = [useRef(), useRef()];
-  const [legendAutoFs, setLegendAutoFs] = useState([null, null]);
-
-  useLayoutEffect(() => {
-    tp.views.forEach((view, vi) => {
-      if (!view.imageDataUrl || !legendRefs[vi]?.current) return;
-      const h = legendRefs[vi].current.getBoundingClientRect().height;
-      if (h <= 0) return;
-      const zoneIndices = [...new Set(view.stepZones.map(z => z.stepIndex))];
-      const rows = zoneIndices.length + view.machineLabels.length + 1;
-      const fs = Math.min(h / rows * 0.45, 18);
-      setLegendAutoFs(prev => {
-        if (Math.abs((prev[vi] || 0) - fs) < 0.5) return prev;
-        const next = [...prev]; next[vi] = fs; return next;
-      });
-    });
-  }, [data, posterH, posterW]);
 
   const getRelPos = (e, vi) => {
     const el = imgRefs[vi].current; if (!el) return { x:0, y:0 };
@@ -1232,6 +1221,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                   <span style={{ fontSize:11*s,fontWeight:700,color:pal.primary,textTransform:"uppercase",letterSpacing:1 }}>{view.label}</span>
                 </div>
                 {/* Conteneur image + overlay annotations */}
+                <div style={{ flex:1,overflow:"hidden",minHeight:0 }}>
                 <div ref={imgRefs[vi]}
                   style={{ position:"relative",cursor:interactive?(planTool==='zone'?'crosshair':'cell'):'default',borderRadius:4*s,border:`1.5px solid ${pal.primary}33`,overflow:"hidden" }}
                   onMouseDown={interactive ? (e=>handleMouseDown(e,vi)) : undefined}
@@ -1344,13 +1334,14 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                     })()}
                   </svg>
                 </div>
+                </div>{/* /flex:1 wrapper */}
               </div>
 
               {/* Légende — organisée par zone */}
               {(()=>{
-                const afs = legendAutoFs[vi] || (9 * s);
+                const afs = tp.legendFontSize || 9;
                 return (
-                  <div ref={legendRefs[vi]} style={{ flex:1,display:"flex",flexDirection:"column",gap:afs*0.6,minWidth:0,borderLeft:`2px solid ${pal.primary}`,paddingLeft:afs,overflow:"hidden" }}>
+                  <div style={{ flex:1,display:"flex",flexDirection:"column",gap:afs*0.6,minWidth:0,boxSizing:"border-box",borderLeft:`2px solid ${pal.primary}`,paddingLeft:afs,overflow:"hidden" }}>
                     {(()=>{
                       // Collecter les step indices présents dans cette vue (zones dessinées)
                       const zoneIndices = [...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b);
@@ -1640,6 +1631,7 @@ ${xhtml}
     ]};
     if (!parsed.technicalPlan.zoneLabel) parsed.technicalPlan.zoneLabel = "number";
     if (parsed.technicalPlan.gridSize === undefined) parsed.technicalPlan.gridSize = 5;
+    if (parsed.technicalPlan.legendFontSize === undefined) parsed.technicalPlan.legendFontSize = 9;
     if (parsed.pdfResolution !== undefined && parsed.pdfResolution <= 10) parsed.pdfResolution = 150;
     setData(parsed);
     if (parsed.version && appVersion && parsed.version !== appVersion)
