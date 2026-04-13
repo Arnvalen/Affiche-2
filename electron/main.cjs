@@ -54,6 +54,10 @@ if (LIBRARY && !fs.existsSync(LIBRARY)) {
 }
 log('LIBRARY: ' + (LIBRARY || 'none'))
 
+/* ═══ Dossier logos ═══ */
+const LOGOS = LIBRARY ? path.join(LIBRARY, 'logos') : path.join(LOCAL, 'logos')
+log('LOGOS: ' + LOGOS)
+
 /* ═══ Log partagé sur le lecteur réseau ═══ */
 if (LIBRARY) {
   try {
@@ -97,6 +101,33 @@ function startServer(cb) {
       return
     }
 
+    // ── API Logos ──
+    if (url === '/__api/logos' && req.method === 'GET') {
+      try {
+        if (!fs.existsSync(LOGOS)) fs.mkdirSync(LOGOS, { recursive: true })
+        const logos = fs.readdirSync(LOGOS).filter(n => /\.(png|jpg|jpeg|svg|gif|webp)$/i.test(n)).sort()
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(JSON.stringify({ logos, path: LOGOS }))
+      } catch (e) {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.statusCode = 500
+        res.end(JSON.stringify({ error: e.message }))
+      }
+      return
+    }
+    if (url.startsWith('/__api/logos/') && req.method === 'GET') {
+      const filename = path.basename(url.replace('/__api/logos/', ''))
+      const filePath = path.join(LOGOS, filename)
+      if (!filePath.startsWith(LOGOS)) { res.statusCode = 403; res.end(''); return }
+      try {
+        const ext = path.extname(filename).toLowerCase()
+        const mime = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp', '.svg':'image/svg+xml' }
+        res.setHeader('Content-Type', mime[ext] || 'application/octet-stream')
+        res.end(fs.readFileSync(filePath))
+      } catch (e) { res.statusCode = 404; res.end('') }
+      return
+    }
+
     // ── API Library ──
     if (url.startsWith('/__api/library')) {
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -128,9 +159,11 @@ function startServer(cb) {
         const filePath = path.join(LIBRARY, filename)
         if (!filePath.startsWith(LIBRARY)) { res.statusCode = 403; res.end('{}'); return }
         try {
-          const content = fs.readFileSync(filePath, 'utf-8')
           const ext = path.extname(filename).toLowerCase()
-          res.setHeader('Content-Type', ext === '.svg' ? 'image/svg+xml' : 'application/json; charset=utf-8')
+          const imgMime = { '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif', '.webp':'image/webp' }
+          const isBinary = ext in imgMime
+          const content = isBinary ? fs.readFileSync(filePath) : fs.readFileSync(filePath, 'utf-8')
+          res.setHeader('Content-Type', imgMime[ext] || (ext === '.svg' ? 'image/svg+xml' : 'application/json; charset=utf-8'))
           res.end(content)
         } catch (e) {
           res.statusCode = 404

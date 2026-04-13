@@ -1221,6 +1221,7 @@ export default function App() {
   const [libDirHandle, setLibDirHandle] = useState(null);
   const [libFiles, setLibFiles] = useState([]);
   const [libSvgFiles, setLibSvgFiles] = useState([]);
+  const [logoFiles, setLogoFiles] = useState([]);
   const [libExpanded, setLibExpanded] = useState({});
   const [electronLib, setElectronLib] = useState(null); // { path } si library Electron détectée
   const [appVersion, setAppVersion] = useState(null);  // version depuis l'API Electron
@@ -1247,6 +1248,9 @@ export default function App() {
         setLibFiles(d.jsons || []);
         setLibSvgFiles(d.svgs || []);
       }
+    }).catch(() => {});
+    fetch('/__api/logos').then(r => r.ok ? r.json() : null).then(d => {
+      if (d && d.logos) setLogoFiles(d.logos);
     }).catch(() => {});
   }, []);
 
@@ -1332,6 +1336,8 @@ ${xhtml}
       try {
         const r = await fetch('/__api/library');
         if (r.ok) { const d = await r.json(); setLibFiles(d.jsons || []); setLibSvgFiles(d.svgs || []); }
+        const rl = await fetch('/__api/logos');
+        if (rl.ok) { const dl = await rl.json(); setLogoFiles(dl.logos || []); }
       } catch {}
       return;
     }
@@ -1501,6 +1507,18 @@ ${xhtml}
                 <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Nom du process</label><Input value={data.header.processName} onChange={v=>up(d=>{d.header.processName=v;})} />
                 <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Sous-titre</label><Input value={data.header.subtitle} onChange={v=>up(d=>{d.header.subtitle=v;})} />
                 <label style={{ fontSize:11,fontWeight:600,color:"#666" }}>Logo</label>
+                {logoFiles.length > 0 && (
+                  <div style={{ display:"flex",flexWrap:"wrap",gap:6,padding:6,background:"#f5f5f5",borderRadius:6 }}>
+                    {logoFiles.map(name => (
+                      <img key={name} src={'/__api/logos/' + encodeURIComponent(name)} title={name}
+                        onClick={async () => { try { const r = await fetch('/__api/logos/' + encodeURIComponent(name)); const b = await r.blob(); const fr = new FileReader(); fr.onload = e => up(d => { d.header.logoDataUrl = e.target.result; }); fr.readAsDataURL(b); } catch {} }}
+                        style={{ height:40,objectFit:"contain",cursor:"pointer",borderRadius:4,border:"2px solid transparent",background:"#fff",padding:2 }}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor="#C8102E"}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor="transparent"}
+                      />
+                    ))}
+                  </div>
+                )}
                 <input ref={logoRef} type="file" accept="image/*" onChange={handleImg(logoRef,"logo")} style={{ fontSize:11 }} />
                 {data.header.logoDataUrl && <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.header.logoDataUrl=null;})}>Supprimer</Btn>}
                 <label style={{ fontSize:11,fontWeight:600,color:"#666",marginTop:6 }}>Image bandeau</label>
