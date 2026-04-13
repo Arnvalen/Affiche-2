@@ -557,7 +557,7 @@ const PosterPreview = ({ data, appVersion }) => {
       })()}
 
       {/* Footer */}
-      <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.footer,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
+      <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.primary,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
         <span><strong style={{ color:"#fff" }}>Version :</strong> {data.version || '—'}</span>
         <span><strong style={{ color:"#fff" }}>Format :</strong> {data.format} · {fmt.w}×{fmt.h}mm · {maxCols} col · Police {s.toFixed(1)}×</span>
         <span><strong style={{ color:"#fff" }}>Ligne :</strong> {data.header.processName}</span>
@@ -581,8 +581,8 @@ const emptyData = () => ({
   sortie: { tags: [], sections: [] },
   steps: [], backgroundImage: "", icons: [], line: [], version: "",
   technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
-    { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
-    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
+    { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
+    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
   ]},
 });
 
@@ -657,8 +657,8 @@ const defaultData = () => ({
   ],
   line: [], version: "",
   technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
-    { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
-    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
+    { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
+    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
   ]},
 });
 
@@ -909,6 +909,13 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
           <button key={v.id} onClick={()=>setActiveView(i)} style={{ flex:1,padding:"6px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:activeView===i?"2px solid #C8102E":"1.5px solid #ddd",background:activeView===i?"#FFF5F5":"#fff",color:activeView===i?"#C8102E":"#666" }}>{v.label}</button>
         ))}
       </div>
+      {/* Vue de côté optionnelle */}
+      <label style={{ display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11,color:"#555" }}>
+        <input type="checkbox" checked={tp.views[1]?.enabled !== false}
+          onChange={e=>up(d=>{d.technicalPlan.views[1].enabled=e.target.checked;})}
+          style={{ accentColor:"#C8102E",width:14,height:14 }} />
+        Afficher la vue de côté
+      </label>
 
       {/* Import image */}
       <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
@@ -1211,7 +1218,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
           </div>
         )}
         {tp.views.map((view,vi) => {
-          if (!view.imageDataUrl) return null;
+          if (!view.imageDataUrl || view.enabled === false) return null;
           return (
             <div key={view.id} style={{ flex:1,display:"flex",gap:10*s,minHeight:0 }}>
               {/* Image annotée */}
@@ -1396,8 +1403,8 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
         })}
       </div>
 
-      {/* Footer — identique à PosterPreview */}
-      <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.footer,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
+      {/* Footer — même couleur que le header */}
+      <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.primary,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
         <span><strong style={{ color:"#fff" }}>Version :</strong> {data.version || '—'}</span>
         <span><strong style={{ color:"#fff" }}>Format :</strong> {data.format} · {fmt.w}×{fmt.h}mm · Plan technique</span>
         <span><strong style={{ color:"#fff" }}>Ligne :</strong> {data.header.processName}</span>
@@ -1632,6 +1639,7 @@ ${xhtml}
     if (!parsed.technicalPlan.zoneLabel) parsed.technicalPlan.zoneLabel = "number";
     if (parsed.technicalPlan.gridSize === undefined) parsed.technicalPlan.gridSize = 5;
     if (parsed.technicalPlan.legendFontSize === undefined) parsed.technicalPlan.legendFontSize = 9;
+    parsed.technicalPlan.views.forEach(v => { if (v.enabled === undefined) v.enabled = true; });
     if (parsed.pdfResolution !== undefined && parsed.pdfResolution <= 10) parsed.pdfResolution = 150;
     setData(parsed);
     if (parsed.version && appVersion && parsed.version !== appVersion)
