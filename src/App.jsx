@@ -512,7 +512,7 @@ const PosterPreview = ({ data, appVersion }) => {
               <Fragment key={zone.step?.id||"unlinked"}>
                 {/* Séparateur entre zones */}
                 {zi>0&&(
-                  <div style={{display:"flex",alignItems:"flex-end",justifyContent:"center",flexShrink:0,paddingBottom:8*s}}>
+                  <div style={{alignSelf:"stretch",display:"flex",alignItems:"flex-end",justifyContent:"center",flexShrink:0,paddingBottom:iconH*0.5+11*s}}>
                     <svg width={16*s} height={16*s} viewBox="0 0 24 24" fill={pal.accent} style={{display:"block"}}><path d="M8 5v14l11-7z"/></svg>
                   </div>
                 )}
