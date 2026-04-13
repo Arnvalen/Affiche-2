@@ -580,7 +580,7 @@ const emptyData = () => ({
   entree: { tags: [], sections: [] },
   sortie: { tags: [], sections: [] },
   steps: [], backgroundImage: "", icons: [], line: [], version: "",
-  technicalPlan: { zoneLabel:"number", views: [
+  technicalPlan: { zoneLabel:"number", gridSize:5, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -656,7 +656,7 @@ const defaultData = () => ({
     }
   ],
   line: [], version: "",
-  technicalPlan: { zoneLabel:"number", views: [
+  technicalPlan: { zoneLabel:"number", gridSize:5, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
     { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[] },
   ]},
@@ -848,11 +848,11 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
  * Permet d'importer des images de plan, de dessiner des zones d'étapes (rectangles)
  * et de placer des lettres de machines par clic.
  */
-const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, setPlanSelStep, planSelMachine, setPlanSelMachine }) => {
+const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, setPlanSelStep, planSelMachine, setPlanSelMachine, planMachineMode, setPlanMachineMode }) => {
   const [activeView, setActiveView] = useState(0);
   const imgInputRefs = [useRef(), useRef()];
 
-  const tp = data.technicalPlan || { zoneLabel:"number", views:[
+  const tp = data.technicalPlan || { zoneLabel:"number", gridSize:5, views:[
     { id:"top",label:"Vue de dessus",imageDataUrl:null,stepZones:[],machineLabels:[] },
     { id:"side",label:"Vue de côté",imageDataUrl:null,stepZones:[],machineLabels:[] },
   ]};
@@ -870,6 +870,37 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
     r.readAsDataURL(f);
   };
 
+  const handleRotate = (vi) => async () => {
+    const dataUrl = tp.views[vi].imageDataUrl;
+    if (!dataUrl) return;
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise(r => { img.onload = r; });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalHeight;
+    canvas.height = img.naturalWidth;
+    const ctx = canvas.getContext('2d');
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+    const newDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const remapPt = p => ({ x: 100 - p.y, y: p.x });
+    const rectToPoints = z => [{ x:z.x, y:z.y }, { x:z.x+z.w, y:z.y }, { x:z.x+z.w, y:z.y+z.h }, { x:z.x, y:z.y+z.h }];
+    up(d => {
+      d.technicalPlan.views[vi].imageDataUrl = newDataUrl;
+      d.technicalPlan.views[vi].stepZones = d.technicalPlan.views[vi].stepZones.map(z => ({
+        ...z,
+        points: (z.points || rectToPoints(z)).map(remapPt),
+        labelX: z.labelX != null ? 100 - z.labelY : null,
+        labelY: z.labelY != null ? z.labelX : null,
+      }));
+      d.technicalPlan.views[vi].machineLabels = d.technicalPlan.views[vi].machineLabels.map(m => ({
+        ...m, x: 100 - m.y, y: m.x,
+        arrowTo: m.arrowTo ? { x: 100 - m.arrowTo.y, y: m.arrowTo.x } : null,
+      }));
+    });
+  };
+
   return (
     <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
       {/* Sélecteur de vue */}
@@ -883,7 +914,12 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
       <div style={{ padding:10,background:"#f5f5f5",borderRadius:8 }}>
         <div style={{ fontSize:11,fontWeight:600,color:"#666",marginBottom:6 }}>Image — {tp.views[activeView]?.label}</div>
         <input ref={imgInputRefs[activeView]} type="file" accept="image/*" onChange={handleImgFile(activeView)} style={{ fontSize:11 }} />
-        {view.imageDataUrl && <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.technicalPlan.views[activeView].imageDataUrl=null;})} style={{ marginTop:6 }}>Supprimer l'image</Btn>}
+        {view.imageDataUrl && (
+          <div style={{ display:"flex",gap:6,marginTop:6 }}>
+            <Btn small outline color="#d32f2f" onClick={()=>up(d=>{d.technicalPlan.views[activeView].imageDataUrl=null;})}>Supprimer</Btn>
+            <Btn small outline color="#1565C0" onClick={handleRotate(activeView)}>↻ Rotation 90°</Btn>
+          </div>
+        )}
       </div>
 
       {/* Outil actif — le dessin se fait dans l'aperçu → */}
@@ -939,41 +975,65 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
             </div>
           </div>
         )}
+        {planTool === 'zone' && steps.length > 0 && (
+          <div style={{ marginTop:8 }}>
+            <label style={{ fontSize:11,color:"#666" }}>Grille snap</label>
+            <div style={{ display:"flex",gap:4,marginTop:4 }}>
+              {[[0,'Aucune'],[2.5,'2.5%'],[5,'5%'],[10,'10%']].map(([v,l])=>(
+                <button key={v} onClick={()=>up(d=>{d.technicalPlan.gridSize=v;})} style={{ flex:1,padding:"4px 4px",borderRadius:5,fontSize:10,fontWeight:600,cursor:"pointer",border:(tp.gridSize||0)===v?"2px solid #1565C0":"1.5px solid #ddd",background:(tp.gridSize||0)===v?"#E3F2FD":"#fff",color:(tp.gridSize||0)===v?"#1565C0":"#666" }}>{l}</button>
+              ))}
+            </div>
+            <div style={{ fontSize:10,color:"#bbb",marginTop:4 }}>Clics pour placer les sommets. Double-clic ou clic sur le 1er point pour fermer.</div>
+          </div>
+        )}
+        {planTool === 'machine' && line.length > 0 && (
+          <div style={{ marginTop:8 }}>
+            <label style={{ fontSize:11,color:"#666" }}>Mode placement</label>
+            <div style={{ display:"flex",gap:6,marginTop:4 }}>
+              {[['point','⬤ Point seul'],['arrow','⬤→ Point + flèche']].map(([k,l])=>(
+                <button key={k} onClick={()=>setPlanMachineMode(k)} style={{ flex:1,padding:"5px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:planMachineMode===k?"2px solid #1565C0":"1.5px solid #ddd",background:planMachineMode===k?"#E3F2FD":"#fff",color:planMachineMode===k?"#1565C0":"#666" }}>{l}</button>
+              ))}
+            </div>
+            <div style={{ fontSize:10,color:"#bbb",marginTop:4 }}>{planMachineMode==='arrow'?"Cliquer-glisser pour placer avec flèche.":"Cliquer pour placer."}</div>
+          </div>
+        )}
       </div>
 
       {/* Annotations existantes */}
-      {(view.stepZones.length > 0 || view.machineLabels.length > 0) && (
-        <SectionCard title={`Annotations — ${tp.views[activeView]?.label}`} defaultOpen={true}>
-          {view.stepZones.map((z,i) => {
-            const color = totalSteps>0 ? getZoneColor(pal, z.stepIndex, totalSteps) : "#999";
-            const step = steps[z.stepIndex];
-            return (
-              <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                <div style={{ width:14,height:14,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
-                <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
-                <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-              </div>
-            );
-          })}
-          {view.machineLabels.map((m,i) => {
-            const item = line[m.lineIndex];
-            const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
-            // Lettre et couleur par zone (même logique que getMachinePlanInfo dans TechnicalPlanPreview)
-            const zoneItems = line.filter(li => li.stepId === item?.stepId);
-            const idx = zoneItems.findIndex(li => li.id === item?.id);
-            const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
-            const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
-            const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
-            return (
-              <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                <div style={{ width:14,height:14,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
-                <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}</span>
-                <span onClick={()=>up(d=>{d.technicalPlan.views[activeView].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-              </div>
-            );
-          })}
-        </SectionCard>
-      )}
+      {tp.views.map((v, vi) => {
+        if (v.stepZones.length === 0 && v.machineLabels.length === 0) return null;
+        return (
+          <SectionCard key={v.id} title={`Annotations — ${v.label}`} defaultOpen={vi===activeView}>
+            {v.stepZones.map((z,i) => {
+              const color = totalSteps>0 ? getZoneColor(pal, z.stepIndex, totalSteps) : "#999";
+              const step = steps[z.stepIndex];
+              return (
+                <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                  <div style={{ width:14,height:14,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
+                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
+                  <span onClick={()=>up(d=>{d.technicalPlan.views[vi].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+                </div>
+              );
+            })}
+            {v.machineLabels.map((m,i) => {
+              const item = line[m.lineIndex];
+              const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
+              const zoneItems = line.filter(li => li.stepId === item?.stepId);
+              const idx = zoneItems.findIndex(li => li.id === item?.id);
+              const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
+              const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+              const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
+              return (
+                <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                  <div style={{ width:14,height:14,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
+                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}{m.arrowTo?' →':''}</span>
+                  <span onClick={()=>up(d=>{d.technicalPlan.views[vi].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+                </div>
+              );
+            })}
+          </SectionCard>
+        );
+      })}
     </div>
   );
 };
@@ -983,7 +1043,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
  * Style unifié avec PosterPreview : même header, même footer, même palette.
  * En mode interactif (interactive=true), le dessin se fait directement sur les images.
  */
-const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSelStep, planSelMachine, onAddZone, onAddLabel }) => {
+const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSelStep, planSelMachine, planMachineMode, onAddZone, onAddLabel, onUpdateZone, onUpdateLabel }) => {
   const pal = getPalette(data.palette);
   const fmt = data.format === "Personnalisé" ? { w:data.customW||800, h:data.customH||500 } : (FORMATS[data.format] || { w:841, h:594 });
   const posterW = Math.round(fmt.w * MM_PX);
@@ -992,14 +1052,13 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   const s = (data.fontScale || 7) * 0.15;
   const hh = data.headerHeight || 56;
   const hr = hh / 56, hs = s * hr;
-  const tp = data.technicalPlan || { zoneLabel:"number", views:[] };
+  const tp = data.technicalPlan || { zoneLabel:"number", gridSize:5, views:[] };
   const steps = data.steps || [];
   const line = data.line || [];
   const icons = data.icons || [];
   const totalSteps = steps.length;
 
   // Lettre et couleur d'une machine = relatives à sa zone (stepId), comme getMachineInfo dans PosterPreview.
-  // Deux machines dans deux zones différentes peuvent avoir la même lettre.
   const getMachinePlanInfo = (lineIndex) => {
     const item = line[lineIndex];
     if (!item) return { letter:'?', color:pal.primary };
@@ -1012,8 +1071,18 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
     };
   };
 
-  const [drawing, setDrawing] = useState(null);     // { x, y, vi, selStep } en cours de drag
-  const [currentRect, setCurrentRect] = useState(null);
+  // Helpers geometry
+  const rectToPoints = z => [{ x:z.x, y:z.y }, { x:z.x+z.w, y:z.y }, { x:z.x+z.w, y:z.y+z.h }, { x:z.x, y:z.y+z.h }];
+  const getPoints = z => z.points || rectToPoints(z);
+  const centroid = pts => ({ x: pts.reduce((a,p)=>a+p.x,0)/pts.length, y: pts.reduce((a,p)=>a+p.y,0)/pts.length });
+  const snapToGrid = (pos, gs) => gs > 0 ? { x: Math.round(pos.x/gs)*gs, y: Math.round(pos.y/gs)*gs } : pos;
+
+  // Unified interaction state machine
+  // null | { mode:'polygon', vi, selStep, points, mouse }
+  // | { mode:'arrow-drag', vi, lineIndex, start, mouse }
+  // | { mode:'drag-label', vi, zoneId }
+  // | { mode:'drag-arrow-tip', vi, labelId }
+  const [interaction, setInteraction] = useState(null);
   const imgRefs = [useRef(), useRef()];
 
   const getRelPos = (e, vi) => {
@@ -1026,32 +1095,73 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   };
 
   useEffect(() => {
-    if (!drawing || !interactive) return;
-    const addZoneFn = onAddZone;
+    if (!interaction || !interactive) return;
     const onMove = (e) => {
-      const pos = getRelPos(e, drawing.vi);
-      setCurrentRect({ x:Math.min(drawing.x,pos.x), y:Math.min(drawing.y,pos.y), w:Math.abs(pos.x-drawing.x), h:Math.abs(pos.y-drawing.y) });
+      if (interaction.mode === 'polygon') {
+        const pos = getRelPos(e, interaction.vi);
+        setInteraction(prev => prev ? { ...prev, mouse: pos } : null);
+      } else if (interaction.mode === 'arrow-drag') {
+        const pos = getRelPos(e, interaction.vi);
+        setInteraction(prev => prev ? { ...prev, mouse: pos } : null);
+      } else if (interaction.mode === 'drag-label') {
+        const pos = getRelPos(e, interaction.vi);
+        if (onUpdateZone) onUpdateZone(interaction.vi, interaction.zoneId, { labelX: pos.x, labelY: pos.y });
+      } else if (interaction.mode === 'drag-arrow-tip') {
+        const pos = getRelPos(e, interaction.vi);
+        if (onUpdateLabel) onUpdateLabel(interaction.vi, interaction.labelId, { arrowTo: pos });
+      }
     };
     const onUp = (e) => {
-      const pos = getRelPos(e, drawing.vi);
-      const x=Math.min(drawing.x,pos.x), y=Math.min(drawing.y,pos.y), w=Math.abs(pos.x-drawing.x), h=Math.abs(pos.y-drawing.y);
-      setDrawing(null); setCurrentRect(null);
-      if (w>=1 && h>=1) addZoneFn(drawing.vi, { stepIndex:drawing.selStep, x, y, w, h });
+      if (interaction.mode === 'arrow-drag') {
+        const pos = getRelPos(e, interaction.vi);
+        const dx = pos.x - interaction.start.x, dy = pos.y - interaction.start.y;
+        const arrowTo = Math.sqrt(dx*dx+dy*dy) > 3 ? pos : null;
+        onAddLabel(interaction.vi, { lineIndex: interaction.lineIndex, x: interaction.start.x, y: interaction.start.y, arrowTo });
+        setInteraction(null);
+      } else if (interaction.mode === 'drag-label' || interaction.mode === 'drag-arrow-tip') {
+        setInteraction(null);
+      }
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, [drawing, interactive]);
+  }, [interaction, interactive]);
 
   const handleMouseDown = (e, vi) => {
     if (!interactive) return;
-    if (planTool==='zone' && steps.length>0) {
+    const gs = tp.gridSize || 0;
+    if (planTool === 'zone' && steps.length > 0) {
       e.preventDefault();
+      const pos = snapToGrid(getRelPos(e, vi), gs);
+      if (!interaction || interaction.mode !== 'polygon' || interaction.vi !== vi) {
+        setInteraction({ mode:'polygon', vi, selStep: planSelStep, points:[pos], mouse:pos });
+      } else {
+        const first = interaction.points[0];
+        const dist = Math.sqrt((pos.x-first.x)**2 + (pos.y-first.y)**2);
+        const threshold = Math.max(3, (gs || 5) * 0.8);
+        if (interaction.points.length >= 3 && dist < threshold) {
+          onAddZone(vi, { stepIndex: interaction.selStep, points: interaction.points, labelX: null, labelY: null });
+          setInteraction(null);
+        } else {
+          setInteraction(prev => prev ? { ...prev, points:[...prev.points, pos] } : null);
+        }
+      }
+    } else if (planTool === 'machine' && line.length > 0) {
       const pos = getRelPos(e, vi);
-      setDrawing({ ...pos, vi, selStep:planSelStep });
-    } else if (planTool==='machine' && line.length>0) {
-      const pos = getRelPos(e, vi);
-      onAddLabel(vi, { lineIndex:planSelMachine, x:pos.x, y:pos.y });
+      if (planMachineMode === 'arrow') {
+        setInteraction({ mode:'arrow-drag', vi, lineIndex: planSelMachine, start: pos, mouse: pos });
+      } else {
+        onAddLabel(vi, { lineIndex: planSelMachine, x: pos.x, y: pos.y, arrowTo: null });
+      }
+    }
+  };
+
+  const handleDoubleClick = (e, vi) => {
+    if (!interactive || !interaction || interaction.mode !== 'polygon' || interaction.vi !== vi) return;
+    e.preventDefault();
+    if (interaction.points.length >= 3) {
+      onAddZone(vi, { stepIndex: interaction.selStep, points: interaction.points, labelX: null, labelY: null });
+      setInteraction(null);
     }
   };
 
@@ -1108,35 +1218,114 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                 <div ref={imgRefs[vi]}
                   style={{ position:"relative",flex:1,cursor:interactive?(planTool==='zone'?'crosshair':'cell'):'default',borderRadius:4*s,border:`1.5px solid ${pal.primary}33`,overflow:"hidden" }}
                   onMouseDown={interactive ? (e=>handleMouseDown(e,vi)) : undefined}
+                  onDoubleClick={interactive ? (e=>handleDoubleClick(e,vi)) : undefined}
                 >
                   <img src={view.imageDataUrl} alt={view.label} style={{ width:"100%",display:"block" }} draggable={false} />
-                  {/* Zones d'étapes — style ligne de production (rounded rect + badge rond) */}
+
+                  {/* Badges de zones — DOM divs pour le texte, positionnés au centroïde ou labelX/Y */}
                   {view.stepZones.map(z => {
                     const color = getZoneColor(pal,z.stepIndex,totalSteps);
                     const step = steps[z.stepIndex];
+                    const pts = getPoints(z);
+                    const ctr = centroid(pts);
+                    const bx = z.labelX != null ? z.labelX : ctr.x;
+                    const by = z.labelY != null ? z.labelY : ctr.y;
                     const badgeContent = tp.zoneLabel === 'text'
                       ? <span style={{ fontSize:Math.max(6,9*s),fontWeight:700,whiteSpace:"nowrap" }}>{step?.title||String(z.stepIndex+1)}</span>
                       : <span style={{ fontSize:Math.max(8,13*s),fontWeight:700,fontFamily:"monospace" }}>{z.stepIndex+1}</span>;
                     const badgeW = tp.zoneLabel === 'text' ? 'auto' : 22*s;
                     const badgePad = tp.zoneLabel === 'text' ? `0 ${Math.max(4,6*s)}px` : 0;
                     return (
-                      <div key={z.id} style={{ position:"absolute",left:z.x+'%',top:z.y+'%',width:z.w+'%',height:z.h+'%',border:`${Math.max(1.5,2*s)}px solid ${color}`,borderRadius:Math.max(3,6*s),background:color+'22',boxSizing:"border-box",pointerEvents:"none" }}>
-                        <div style={{ position:"absolute",top:-(11*s),left:-(11*s),minWidth:22*s,width:badgeW,height:22*s,borderRadius:tp.zoneLabel==='text'?Math.max(3,11*s):"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:badgePad,flexShrink:0,boxSizing:"content-box" }}>{badgeContent}</div>
-                      </div>
+                      <div key={z.id+'b'} style={{ position:"absolute",left:bx+'%',top:by+'%',transform:"translate(-50%,-50%)",minWidth:22*s,width:badgeW,height:22*s,borderRadius:tp.zoneLabel==='text'?Math.max(3,11*s):"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:badgePad,boxSizing:"content-box",cursor:interactive?"grab":"default",zIndex:2,pointerEvents:interactive?"auto":"none",userSelect:"none" }}
+                        onMouseDown={interactive ? (e=>{e.stopPropagation();setInteraction({mode:'drag-label',vi,zoneId:z.id});}) : undefined}
+                      >{badgeContent}</div>
                     );
                   })}
+
                   {/* Lettres machines — lettre et couleur relatives à la zone (stepId) */}
                   {view.machineLabels.map(m => {
                     const { letter, color:mColor } = getMachinePlanInfo(m.lineIndex);
                     return (
-                      <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:mColor,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)` }}>{letter}</div>
+                      <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:mColor,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)`,zIndex:2 }}>{letter}</div>
                     );
                   })}
-                  {/* Rectangle en cours de dessin */}
-                  {currentRect && drawing?.vi===vi && (()=>{
-                    const color = totalSteps>0 ? getZoneColor(pal,drawing.selStep,totalSteps) : pal.primary;
-                    return <div style={{ position:"absolute",left:currentRect.x+'%',top:currentRect.y+'%',width:currentRect.w+'%',height:currentRect.h+'%',border:`2px dashed ${color}`,background:color+'18',boxSizing:"border-box",pointerEvents:"none" }} />;
-                  })()}
+
+                  {/* Overlay SVG : polygones, grille, flèches, in-progress */}
+                  <svg style={{ position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",overflow:"visible" }}
+                    viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <defs>
+                      <marker id={`arrowhead-${vi}`} markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto" markerUnits="strokeWidth">
+                        <path d="M0,0 L0,5 L5,2.5 z" fill="context-stroke" />
+                      </marker>
+                    </defs>
+
+                    {/* Grille snap — visible uniquement en cours de dessin polygone */}
+                    {interactive && interaction?.mode==='polygon' && interaction.vi===vi && (tp.gridSize||0)>0 && (()=>{
+                      const gs = tp.gridSize;
+                      const lines = [];
+                      for (let v=0; v<=100; v+=gs) {
+                        lines.push(<line key={'v'+v} x1={v} y1={0} x2={v} y2={100} stroke="#00000018" strokeWidth={0.2} vectorEffect="non-scaling-stroke" />);
+                        lines.push(<line key={'h'+v} x1={0} y1={v} x2={100} y2={v} stroke="#00000018" strokeWidth={0.2} vectorEffect="non-scaling-stroke" />);
+                      }
+                      return lines;
+                    })()}
+
+                    {/* Polygones des zones */}
+                    {view.stepZones.map(z => {
+                      const color = getZoneColor(pal,z.stepIndex,totalSteps);
+                      const pts = getPoints(z);
+                      const ptStr = pts.map(p=>`${p.x},${p.y}`).join(' ');
+                      const ctr = centroid(pts);
+                      const bx = z.labelX != null ? z.labelX : ctr.x;
+                      const by = z.labelY != null ? z.labelY : ctr.y;
+                      return (
+                        <g key={z.id}>
+                          <polygon points={ptStr} fill={color+'22'} stroke={color} strokeWidth={Math.max(0.3,0.5*s)} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                        </g>
+                      );
+                    })}
+
+                    {/* Flèches des lettres machines */}
+                    {view.machineLabels.map(m => {
+                      const { color:mColor } = getMachinePlanInfo(m.lineIndex);
+                      if (!m.arrowTo) return null;
+                      return (
+                        <g key={m.id+'arrow'}>
+                          <line x1={m.x} y1={m.y} x2={m.arrowTo.x} y2={m.arrowTo.y} stroke={mColor} strokeWidth={Math.max(0.8,1.2*s)} markerEnd={`url(#arrowhead-${vi})`} vectorEffect="non-scaling-stroke" />
+                          {/* Handle invisible de déplacement de la pointe (zone cliquable) */}
+                          {interactive && <circle cx={m.arrowTo.x} cy={m.arrowTo.y} r={2.5} fill="transparent" style={{ cursor:'move',pointerEvents:'auto' }}
+                            onMouseDown={e=>{e.stopPropagation();setInteraction({mode:'drag-arrow-tip',vi,labelId:m.id});}} />}
+                        </g>
+                      );
+                    })}
+
+                    {/* Flèche arrow-drag en cours */}
+                    {interaction?.mode==='arrow-drag' && interaction.vi===vi && (()=>{
+                      const {color:mColor} = getMachinePlanInfo(interaction.lineIndex);
+                      return <line x1={interaction.start.x} y1={interaction.start.y} x2={interaction.mouse.x} y2={interaction.mouse.y} stroke={mColor} strokeWidth={Math.max(0.8,1.2*s)} strokeDasharray="2,1" markerEnd={`url(#arrowhead-${vi})`} vectorEffect="non-scaling-stroke" />;
+                    })()}
+
+                    {/* Polygone en cours de dessin */}
+                    {interaction?.mode==='polygon' && interaction.vi===vi && (()=>{
+                      const color = totalSteps>0 ? getZoneColor(pal,interaction.selStep,totalSteps) : pal.primary;
+                      const pts = [...interaction.points, interaction.mouse];
+                      const ptStr = pts.map(p=>`${p.x},${p.y}`).join(' ');
+                      const first = interaction.points[0];
+                      const dist = Math.sqrt((interaction.mouse.x-first.x)**2+(interaction.mouse.y-first.y)**2);
+                      const canClose = interaction.points.length >= 3;
+                      return (
+                        <g>
+                          <polyline points={ptStr} fill="none" stroke={color} strokeWidth={Math.max(0.3,0.4*s)} strokeDasharray="2,1" vectorEffect="non-scaling-stroke" />
+                          {/* Points déjà posés */}
+                          {interaction.points.slice(1).map((p,i)=>(
+                            <circle key={i} cx={p.x} cy={p.y} r={0.8} fill={color} vectorEffect="non-scaling-stroke" />
+                          ))}
+                          {/* 1er point — indicateur de fermeture */}
+                          <circle cx={first.x} cy={first.y} r={canClose && dist < Math.max(3,(tp.gridSize||5)*0.8) ? 2 : 1.2} fill={color} opacity={0.9} vectorEffect="non-scaling-stroke" />
+                        </g>
+                      );
+                    })()}
+                  </svg>
                 </div>
               </div>
 
@@ -1229,6 +1418,7 @@ export default function App() {
   const [planTool, setPlanTool] = useState('zone');         // 'zone' | 'machine'
   const [planSelStep, setPlanSelStep] = useState(0);
   const [planSelMachine, setPlanSelMachine] = useState(0);
+  const [planMachineMode, setPlanMachineMode] = useState('point'); // 'point' | 'arrow'
   const [saveModal, setSaveModal] = useState(null);     // { defaultName, onConfirm } ou null
   const [saveModalInput, setSaveModalInput] = useState('');
   const [versionNotice, setVersionNotice] = useState(null); // version du doc chargé si ≠ appVersion
@@ -1425,6 +1615,7 @@ ${xhtml}
       { id:"side", label:"Vue de côté",  imageDataUrl:null, stepZones:[], machineLabels:[] },
     ]};
     if (!parsed.technicalPlan.zoneLabel) parsed.technicalPlan.zoneLabel = "number";
+    if (parsed.technicalPlan.gridSize === undefined) parsed.technicalPlan.gridSize = 5;
     if (parsed.pdfResolution !== undefined && parsed.pdfResolution <= 10) parsed.pdfResolution = 150;
     setData(parsed);
     if (parsed.version && appVersion && parsed.version !== appVersion)
@@ -1600,7 +1791,7 @@ ${xhtml}
             {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={steps=>up(d=>{d.steps=steps;})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
             {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps} onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})} libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
-            {tab === "plan" && <TechnicalPlanEditor data={data} up={up} planTool={planTool} setPlanTool={setPlanTool} planSelStep={planSelStep} setPlanSelStep={setPlanSelStep} planSelMachine={planSelMachine} setPlanSelMachine={setPlanSelMachine} />}
+            {tab === "plan" && <TechnicalPlanEditor data={data} up={up} planTool={planTool} setPlanTool={setPlanTool} planSelStep={planSelStep} setPlanSelStep={setPlanSelStep} planSelMachine={planSelMachine} setPlanSelMachine={setPlanSelMachine} planMachineMode={planMachineMode} setPlanMachineMode={setPlanMachineMode} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
                 {/* Choix de ce qui est exporté */}
@@ -1718,9 +1909,11 @@ ${xhtml}
         </div>
         {/* Poster / Plan technique rendu à taille réelle puis réduit par transform: scale() */}
         {(()=>{const sel=FORMATS[data.format]||{w:data.customW,h:data.customH};const pad=48;const posterW=Math.round(sel.w*MM_PX);const posterH=Math.round(sel.h*MM_PX);const sc=Math.min((previewSize.w-pad)/posterW,(previewSize.h-pad)/posterH);return <div ref={previewContainerRef} style={{ flex:1,overflow:"hidden",background:"#e8e8e8",display:"flex",justifyContent:"center",alignItems:"center" }}><div style={{ transform:`scale(${sc.toFixed(3)})`,transformOrigin:"center center" }}>{previewMode==='plan'
-  ? <TechnicalPlanPreview data={data} appVersion={appVersion} interactive={true} planTool={planTool} planSelStep={planSelStep} planSelMachine={planSelMachine}
+  ? <TechnicalPlanPreview data={data} appVersion={appVersion} interactive={true} planTool={planTool} planSelStep={planSelStep} planSelMachine={planSelMachine} planMachineMode={planMachineMode}
       onAddZone={(vi,zone)=>up(d=>{d.technicalPlan.views[vi].stepZones.push({id:uid(),...zone});})}
-      onAddLabel={(vi,label)=>up(d=>{d.technicalPlan.views[vi].machineLabels.push({id:uid(),...label});})} />
+      onAddLabel={(vi,label)=>up(d=>{d.technicalPlan.views[vi].machineLabels.push({id:uid(),...label});})}
+      onUpdateZone={(vi,zoneId,patch)=>up(d=>{const z=d.technicalPlan.views[vi].stepZones.find(z=>z.id===zoneId);if(z)Object.assign(z,patch);})}
+      onUpdateLabel={(vi,labelId,patch)=>up(d=>{const m=d.technicalPlan.views[vi].machineLabels.find(m=>m.id===labelId);if(m)Object.assign(m,patch);})} />
   : <PosterPreview data={data} appVersion={appVersion} />}</div></div>;})()}
       </div>
       {/* Styles d'impression : masque la sidebar et supprime le scaling pour imprimer le poster en taille réelle */}
