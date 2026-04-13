@@ -542,7 +542,7 @@ const PosterPreview = ({ data, appVersion }) => {
                               {data.showLineTags!==false&&linkedOp&&(linkedOp.tags||[]).length>0&&<div style={{display:"flex",gap:1*s,flexWrap:"wrap",justifyContent:"center"}}>{linkedOp.tags.map(t=><Tag key={t.id} type={t.type} scale={s*0.65} small />)}</div>}
                             </div>
                             <SvgIcon svgData={icon.svgData} height={iconH*(item.size||1)} />
-                            <span style={{fontSize:5.5*s,color:"#555",fontWeight:600,textAlign:"center",maxWidth:iconH*(item.size||1)*1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{icon.name}</span>
+                            <span style={{fontSize:8*s,color:"#555",fontWeight:600,textAlign:"center",maxWidth:iconH*(item.size||1)*1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{icon.name}</span>
                           </div>
                         </Fragment>
                       );
