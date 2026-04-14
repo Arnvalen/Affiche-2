@@ -493,67 +493,7 @@ const PosterPreview = ({ data, appVersion }) => {
             <img src={data.backgroundImage} alt="" style={{maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block"}} />
           </div>
         );
-
-        // Groupement par zone (ordre data.steps) + non-liés en dernier
-        const unlinked=(data.line||[]).filter(m=>!m.stepId);
-        const byStep=data.steps.map((st,si)=>({
-          step:st,color:getZoneColor(pal, si, totalSteps),stepIndex:si,
-          machines:(data.line||[]).filter(m=>m.stepId===st.id)
-        })).filter(z=>z.machines.length>0);
-        const zones=[...byStep,...(unlinked.length?[{step:null,color:"#9E9E9E",stepIndex:-1,machines:unlinked}]:[])];
-        if(!zones.length) return null;
-
-        const getLinkedOp=(lineItemId)=>{for(const st of data.steps)for(const op of(st.operations||[]))if(op.lineItemId===lineItemId)return op;return null;};
-        const iconH=bh*0.52;
-
-        return(
-          <div style={{flexShrink:0,width:"100%",height:bh,background:"#fafafa",borderTop:"1px solid #eee",display:"flex",alignItems:"flex-end",justifyContent:"center",gap:6*s,padding:`0 ${10*s}px ${8*s}px`,overflow:"hidden"}}>
-            {zones.map((zone,zi)=>(
-              <Fragment key={zone.step?.id||"unlinked"}>
-                {/* Séparateur entre zones */}
-                {zi>0&&(
-                  <div style={{alignSelf:"stretch",display:"flex",alignItems:"flex-end",justifyContent:"center",flexShrink:0,paddingBottom:iconH*0.5+11*s}}>
-                    <svg width={16*s} height={16*s} viewBox="0 0 24 24" fill={pal.accent} style={{display:"block"}}><path d="M8 5v14l11-7z"/></svg>
-                  </div>
-                )}
-                {/* Zone — numéro au-dessus du rectangle arrondi */}
-                <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,gap:2*s}}>
-                  {/* Label de zone : numéro ou titre */}
-                  {(data.lineZoneLabel||"number")==="title"
-                    ? <div style={{fontSize:10*s,fontWeight:700,color:zone.color,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:zone.machines.length*80*s}}>{zone.step?.title||"?"}</div>
-                    : <div style={{width:22*s,height:22*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:14*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"monospace"}}>{zone.stepIndex>=0?zone.stepIndex+1:"?"}</div>
-                  }
-                  {/* Rectangle arrondi */}
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0,border:`2px solid ${zone.color}`,borderRadius:6*s,background:zone.color+"18",padding:`${3*s}px ${6*s}px`}}>
-                  {/* Machines */}
-                  <div style={{display:"flex",alignItems:"flex-end",gap:4*s}}>
-                    {zone.machines.map((item,mi)=>{
-                      const icon=(data.icons||[]).find(ic=>ic.id===item.iconId);
-                      if(!icon) return null;
-                      const letter=String.fromCharCode(65+mi);
-                      const linkedOp=getLinkedOp(item.id);
-                      return(
-                        <Fragment key={item.id}>
-                          {mi>0&&<div style={{alignSelf:"stretch",display:"flex",alignItems:"center",flexShrink:0}}><svg width={16*s} height={16*s} viewBox="0 0 24 24" fill={zone.color} style={{display:"block"}}><path d="M8 5v14l11-7z"/></svg></div>}
-                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s,flexShrink:0}}>
-                            {/* Lettre + tags en dessous, centrés */}
-                            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:1*s}}>
-                              <div style={{width:22*s,height:22*s,borderRadius:"50%",background:zone.color,color:"#fff",fontSize:14*s,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontFamily:"monospace"}}>{letter}</div>
-                              {data.showLineTags!==false&&linkedOp&&(linkedOp.tags||[]).length>0&&<div style={{display:"flex",gap:1*s,flexWrap:"wrap",justifyContent:"center"}}>{linkedOp.tags.map(t=><Tag key={t.id} type={t.type} scale={s*0.65} small />)}</div>}
-                            </div>
-                            <SvgIcon svgData={icon.svgData} height={iconH*(item.size||1)} />
-                            <span style={{fontSize:8*s,color:"#555",fontWeight:600,textAlign:"center",maxWidth:iconH*(item.size||1)*1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{icon.name}</span>
-                          </div>
-                        </Fragment>
-                      );
-                    })}
-                  </div>
-                  </div>{/* /rectangle arrondi */}
-                </div>{/* /outer column */}
-              </Fragment>
-            ))}
-          </div>
-        );
+        return <LineFlowBand data={data} bh={bh} s={s} pal={pal} posterW={posterW} />;
       })()}
 
       {/* Footer */}
@@ -664,6 +604,149 @@ const defaultData = () => ({
 
 /* ═══════════════════ LINE EDITOR ═══════════════════ */
 
+/* ═══════════════════ DAG LAYOUT ENGINE ═══════════════════ */
+
+function computeLayout(nodes) {
+  if (!nodes.length) return { col:{}, track:{}, numCols:0, maxTracks:1 };
+  const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
+  const pred = Object.fromEntries(nodes.map(n=>[n.id, new Set()]));
+  nodes.forEach(n => (n.next||[]).forEach(nid => { if (pred[nid]) pred[nid].add(n.id); }));
+  const inDeg = Object.fromEntries(nodes.map(n=>[n.id, pred[n.id].size]));
+  const queue = nodes.filter(n=>inDeg[n.id]===0).map(n=>n.id);
+  const topo = [];
+  while (queue.length) {
+    const id = queue.shift(); topo.push(id);
+    (byId[id]?.next||[]).forEach(nid => { if (byId[nid]) { inDeg[nid]--; if (!inDeg[nid]) queue.push(nid); } });
+  }
+  // Nodes not reached (cycles) append at end
+  nodes.forEach(n => { if (!topo.includes(n.id)) topo.push(n.id); });
+  const col = {};
+  topo.forEach(id => { col[id] = pred[id].size ? Math.max(...[...pred[id]].map(p=>(col[p]||0)+1)) : 0; });
+  const byCol = {};
+  topo.forEach(id => { const c=col[id]||0; if (!byCol[c]) byCol[c]=[]; byCol[c].push(id); });
+  const track = {};
+  Object.values(byCol).forEach(grp => grp.forEach((id,ti) => { track[id]=ti; }));
+  const numCols = topo.length ? Math.max(...Object.values(col))+1 : 0;
+  const maxTracks = Object.values(byCol).reduce((m,g)=>Math.max(m,g.length),1);
+  return { col, track, numCols, maxTracks };
+}
+
+/* ═══════════════════ LINE FLOW BAND (SVG) ═══════════════════ */
+
+const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
+  const nodes = data.line || [];
+  const layout = useMemo(() => computeLayout(nodes), [nodes]);
+  const { col, track, numCols, maxTracks } = layout;
+  if (!nodes.length) return null;
+
+  const pad = 10 * s;
+  const availW = posterW - pad * 2;
+  const colW = numCols > 0 ? availW / numCols : availW;
+  const rowH = bh / maxTracks;
+  const nodeW = Math.min(colW * 0.72, rowH * 0.8);
+  const iconH = nodeW * 0.75;
+  const letterR = Math.max(8, 10 * s);
+
+  const cx = id => pad + (col[id]||0) * colW + colW / 2;
+  const cy = id => (track[id]||0) * rowH + rowH / 2;
+
+  // Zone background rects grouped by stepId
+  const steps = data.steps || [];
+  const totalSteps = steps.length;
+  const zoneRects = [];
+  const byStep = {};
+  nodes.forEach(n => { const k=n.stepId||'__none__'; if (!byStep[k]) byStep[k]=[]; byStep[k].push(n); });
+  Object.entries(byStep).forEach(([key, grp]) => {
+    if (key === '__none__') return;
+    const si = steps.findIndex(s=>s.id===key);
+    const color = si>=0 ? getZoneColor(pal,si,totalSteps) : '#9E9E9E';
+    const xs = grp.map(n=>cx(n.id));
+    const ys = grp.map(n=>cy(n.id));
+    const x1 = Math.min(...xs) - nodeW/2 - 4*s;
+    const y1 = Math.min(...ys) - rowH/2 + 2*s;
+    const x2 = Math.max(...xs) + nodeW/2 + 4*s;
+    const y2 = Math.max(...ys) + rowH/2 - 2*s;
+    // Zone label (number or title)
+    const labelText = (data.lineZoneLabel||'number')==='title' ? (steps[si]?.title||'?') : String(si+1);
+    zoneRects.push({ key, color, x1, y1, x2, y2, si, labelText });
+  });
+
+  const arrowId = 'lf-arr-' + (pal.primary||'').replace('#','');
+
+  return (
+    <svg width={posterW} height={bh} style={{flexShrink:0,display:'block',background:'#fafafa',borderTop:'1px solid #eee',overflow:'hidden'}}>
+      <defs>
+        <marker id={arrowId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L0,6 L5,3 z" fill={pal.accent||pal.primary} />
+        </marker>
+      </defs>
+
+      {/* Zone backgrounds */}
+      {zoneRects.map(z => (
+        <g key={z.key}>
+          <rect x={z.x1} y={z.y1} width={z.x2-z.x1} height={z.y2-z.y1}
+            rx={5*s} fill={z.color+'18'} stroke={z.color} strokeWidth={1.5*s} />
+          {(data.lineZoneLabel||'number')==='title'
+            ? <text x={(z.x1+z.x2)/2} y={z.y1-3*s} textAnchor="middle" fill={z.color}
+                fontSize={9*s} fontWeight={700} fontFamily="sans-serif"
+                style={{textTransform:'uppercase',letterSpacing:1}}>{z.labelText}</text>
+            : <g transform={`translate(${(z.x1+z.x2)/2},${z.y1-letterR-2*s})`}>
+                <circle r={letterR} fill={z.color}/>
+                <text textAnchor="middle" dy="0.35em" fill="#fff" fontSize={13*s} fontWeight={700} fontFamily="monospace">{z.labelText}</text>
+              </g>
+          }
+        </g>
+      ))}
+
+      {/* Edges */}
+      {nodes.map(n => (n.next||[]).map(nid => {
+        const target = nodes.find(m=>m.id===nid);
+        if (!target) return null;
+        const x1=cx(n.id)+nodeW*0.38, y1=cy(n.id);
+        const x2=cx(nid)-nodeW*0.38, y2=cy(nid);
+        const si = n.stepId ? steps.findIndex(s=>s.id===n.stepId) : -1;
+        const color = si>=0 ? getZoneColor(pal,si,totalSteps) : (pal.accent||pal.primary);
+        return <line key={n.id+'-'+nid} x1={x1} y1={y1} x2={x2} y2={y2}
+          stroke={color} strokeWidth={Math.max(1,1.5*s)} markerEnd={`url(#${arrowId})`} />;
+      }))}
+
+      {/* Nodes */}
+      {nodes.map(n => {
+        const icon = (data.icons||[]).find(ic=>ic.id===n.iconId);
+        if (!icon) return null;
+        const si = n.stepId ? steps.findIndex(s=>s.id===n.stepId) : -1;
+        const color = si>=0 ? getZoneColor(pal,si,totalSteps) : '#9E9E9E';
+        const zoneItems = nodes.filter(m=>m.stepId===n.stepId);
+        const sorted = zoneItems.slice().sort((a,b)=>(track[a.id]||0)-(track[b.id]||0));
+        const letter = String.fromCharCode(65+Math.max(0,sorted.findIndex(m=>m.id===n.id)));
+        const iH = iconH * (n.size||1);
+        const x = cx(n.id); const y = cy(n.id);
+        // Tags (linked operation)
+        const linkedOp = data.showLineTags!==false ? (()=>{ for(const st of (data.steps||[])) for(const op of (st.operations||[])) if(op.lineItemId===n.id) return op; return null; })() : null;
+        return (
+          <g key={n.id}>
+            <image href={svgUrl(icon.svgData)} x={x-iH/2} y={y-iH/2} width={iH} height={iH} />
+            <circle cx={x} cy={y-iH/2-letterR-1} r={letterR} fill={color}/>
+            <text x={x} y={y-iH/2-letterR-1} textAnchor="middle" dy="0.35em" fill="#fff"
+              fontSize={Math.max(8,13*s)} fontWeight={700} fontFamily="monospace">{letter}</text>
+            <text x={x} y={y+iH/2+9*s} textAnchor="middle" fill="#555"
+              fontSize={8*s} fontWeight={600} fontFamily="sans-serif"
+              style={{dominantBaseline:'hanging'}}>{icon.name}</text>
+            {linkedOp && (linkedOp.tags||[]).length>0 && linkedOp.tags.map((t,ti)=>{
+              const tc = TAG_COLORS[t.type]||{bg:'#eee',color:'#333',border:'#ccc'};
+              const tw = 24*s; const th = 12*s;
+              return <rect key={t.id} x={x+(ti-linkedOp.tags.length/2+0.5)*tw-tw/2} y={y-iH/2-letterR*2-th-2}
+                width={tw} height={th} rx={3} fill={tc.bg} stroke={tc.border} strokeWidth={0.5}/>;
+            })}
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
+/* ═══════════════════ LINE FLOW EDITOR ═══════════════════ */
+
 const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) => {
   const iconFileRef = useRef();
 
@@ -685,13 +768,17 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
     });
   };
 
-  const addToLine = (iconId) => upLine([...line, { id:uid(), iconId, stepId:null }]);
-  const removeFromLine = (id) => upLine(line.filter(m => m.id !== id));
+  const addToLine = (iconId) => upLine([...line, { id:uid(), iconId, stepId:null, next:[] }]);
+  const removeFromLine = (id) => {
+    upLine(line.filter(m => m.id !== id).map(m => ({...m, next:(m.next||[]).filter(nid=>nid!==id)})));
+  };
   const removeIcon = (iconId) => {
     upIcons(icons.filter(ic => ic.id !== iconId));
     upLine(line.filter(m => m.iconId !== iconId));
   };
   const updateLineItem = (id, patch) => upLine(line.map(m => m.id===id ? {...m,...patch} : m));
+  const addConnection = (fromId, toId) => upLine(line.map(m => m.id===fromId ? {...m, next:[...new Set([...(m.next||[]),toId])]} : m));
+  const removeConnection = (fromId, toId) => upLine(line.map(m => m.id===fromId ? {...m, next:(m.next||[]).filter(id=>id!==toId)} : m));
   const moveInZone = (itemId, dir) => {
     const item = line.find(m => m.id === itemId);
     if (!item) return;
@@ -816,13 +903,35 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                               <span onClick={()=>moveInZone(item.id,1)}  style={{cursor:'pointer',fontSize:10,color:'#aaa',padding:'0 2px'}}>→</span>
                               <span onClick={()=>removeFromLine(item.id)} style={{cursor:'pointer',fontSize:9,color:'#ccc',padding:'0 2px'}}>✕</span>
                             </div>
+                            {/* Connexions sortantes */}
+                            {(item.next||[]).length>0 && (
+                              <div style={{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}}>
+                                {(item.next||[]).map(nid=>{
+                                  const nm=line.find(m=>m.id===nid);
+                                  const ni=line.filter(m=>m.stepId===nm?.stepId).findIndex(m=>m.id===nid);
+                                  const nl=ni>=0?String.fromCharCode(65+ni):'?';
+                                  return <span key={nid} onClick={()=>removeConnection(item.id,nid)}
+                                    title="Cliquer pour supprimer" style={{fontSize:7,background:zone.color+'33',color:zone.color,borderRadius:3,padding:'1px 3px',cursor:'pointer',border:`1px solid ${zone.color}66`}}>→{nl} ✕</span>;
+                                })}
+                              </div>
+                            )}
+                            <select value="" onChange={e=>{if(e.target.value)addConnection(item.id,e.target.value);}}
+                              style={{fontSize:7,padding:'1px 2px',border:'1px dashed #ddd',borderRadius:3,maxWidth:64,color:'#888',cursor:'pointer'}}>
+                              <option value="">+→</option>
+                              {line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id)).map(m=>{
+                                const mzi=line.filter(li=>li.stepId===m.stepId).findIndex(li=>li.id===m.id);
+                                const ml=mzi>=0?String.fromCharCode(65+mzi):'?';
+                                const mic=icons.find(ic=>ic.id===m.iconId);
+                                return <option key={m.id} value={m.id}>{ml} {mic?.name||'?'}</option>;
+                              })}
+                            </select>
                           </div>
                         </Fragment>
                       );
                     })}
                     {/* Drop target pour ajouter une machine dans cette zone */}
                     <div onDragOver={e=>e.preventDefault()}
-                      onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('iconId');if(id){const stepId=zone.step?.id||null;upLine([...line,{id:uid(),iconId:id,stepId}]);}}}
+                      onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('iconId');if(id){const stepId=zone.step?.id||null;upLine([...line,{id:uid(),iconId:id,stepId,next:[]}]);}}}
                       style={{width:40,height:56,border:'2px dashed #ddd',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:20,cursor:'copy',alignSelf:'center'}}>+</div>
                   </div>
                 </div>
@@ -949,22 +1058,23 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
         {planTool === 'machine' && line.length > 0 && (
           <div style={{ marginTop:8 }}>
             <label style={{ fontSize:11,color:"#666" }}>Machine à placer</label>
-            <select value={planSelMachine} onChange={e=>setPlanSelMachine(parseInt(e.target.value))}
+            <select value={planSelMachine||''} onChange={e=>setPlanSelMachine(e.target.value||null)}
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
+              <option value="">— choisir —</option>
               {(()=>{
                 // Trier par stepIndex (ordre des étapes) puis par lettre dans la zone
-                const sorted = line.map((item,i)=>{
+                const sorted = line.map(item=>{
                   const step = steps.find(s => s.id === item.stepId);
                   const si = step ? steps.indexOf(step) : Infinity;
                   const zoneItems = line.filter(m => m.stepId === item.stepId);
                   const idx = zoneItems.findIndex(m => m.id === item.id);
                   const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
-                  return { item, i, si, idx, letter, step };
+                  return { item, si, idx, letter, step };
                 }).sort((a,b) => a.si !== b.si ? a.si - b.si : a.idx - b.idx);
-                return sorted.map(({ item, i, letter, step }) => {
+                return sorted.map(({ item, letter, step }) => {
                   const icon = (icons||[]).find(ic=>ic.id===item.iconId);
                   const zoneLabel = step ? step.title : 'sans zone';
-                  return <option key={item.id} value={i}>{zoneLabel} — {letter} · {icon?.name||"Machine"}</option>;
+                  return <option key={item.id} value={item.id}>{zoneLabel} — {letter} · {icon?.name||"Machine"}</option>;
                 });
               })()}
             </select>
@@ -1029,7 +1139,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
               );
             })}
             {v.machineLabels.map((m,i) => {
-              const item = line[m.lineIndex];
+              const item = line.find(m2=>m2.id===m.lineId);
               const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
               const zoneItems = line.filter(li => li.stepId === item?.stepId);
               const idx = zoneItems.findIndex(li => li.id === item?.id);
@@ -1072,8 +1182,8 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   const totalSteps = steps.length;
 
   // Lettre et couleur d'une machine = relatives à sa zone (stepId), comme getMachineInfo dans PosterPreview.
-  const getMachinePlanInfo = (lineIndex) => {
-    const item = line[lineIndex];
+  const getMachinePlanInfo = (lineId) => {
+    const item = line.find(m => m.id === lineId);
     if (!item) return { letter:'?', color:pal.primary };
     const zoneItems = line.filter(m => m.stepId === item.stepId);
     const idx = zoneItems.findIndex(m => m.id === item.id);
@@ -1092,7 +1202,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
 
   // Unified interaction state machine
   // null | { mode:'polygon', vi, selStep, points, mouse }
-  // | { mode:'arrow-drag', vi, lineIndex, start, mouse }
+  // | { mode:'arrow-drag', vi, lineId, start, mouse }
   // | { mode:'drag-label', vi, zoneId }
   // | { mode:'drag-arrow-tip', vi, labelId }
   const [interaction, setInteraction] = useState(null);
@@ -1129,7 +1239,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
         const pos = getRelPos(e, interaction.vi);
         const dx = pos.x - interaction.start.x, dy = pos.y - interaction.start.y;
         const arrowTo = Math.sqrt(dx*dx+dy*dy) > 3 ? pos : null;
-        onAddLabel(interaction.vi, { lineIndex: interaction.lineIndex, x: interaction.start.x, y: interaction.start.y, arrowTo });
+        onAddLabel(interaction.vi, { lineId: interaction.lineId, x: interaction.start.x, y: interaction.start.y, arrowTo });
         setInteraction(null);
       } else if (interaction.mode === 'drag-label' || interaction.mode === 'drag-arrow-tip') {
         setInteraction(null);
@@ -1159,12 +1269,12 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
           setInteraction(prev => prev ? { ...prev, points:[...prev.points, pos] } : null);
         }
       }
-    } else if (planTool === 'machine' && line.length > 0) {
+    } else if (planTool === 'machine' && line.length > 0 && planSelMachine) {
       const pos = getRelPos(e, vi);
       if (planMachineMode === 'arrow') {
-        setInteraction({ mode:'arrow-drag', vi, lineIndex: planSelMachine, start: pos, mouse: pos });
+        setInteraction({ mode:'arrow-drag', vi, lineId: planSelMachine, start: pos, mouse: pos });
       } else {
-        onAddLabel(vi, { lineIndex: planSelMachine, x: pos.x, y: pos.y, arrowTo: null });
+        onAddLabel(vi, { lineId: planSelMachine, x: pos.x, y: pos.y, arrowTo: null });
       }
     }
   };
@@ -1258,7 +1368,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
 
                   {/* Lettres machines — lettre et couleur relatives à la zone (stepId) */}
                   {view.machineLabels.map(m => {
-                    const { letter, color:mColor } = getMachinePlanInfo(m.lineIndex);
+                    const { letter, color:mColor } = getMachinePlanInfo(m.lineId);
                     return (
                       <div key={m.id} style={{ position:"absolute",left:m.x+'%',top:m.y+'%',transform:"translate(-50%,-50%)",width:22*s,height:22*s,borderRadius:"50%",background:mColor,color:"#fff",fontSize:Math.max(8,13*s),fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",pointerEvents:"none",boxShadow:`0 1px 4px rgba(0,0,0,0.3)`,zIndex:2 }}>{letter}</div>
                     );
@@ -1301,7 +1411,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
 
                     {/* Flèches des lettres machines */}
                     {view.machineLabels.map(m => {
-                      const { color:mColor } = getMachinePlanInfo(m.lineIndex);
+                      const { color:mColor } = getMachinePlanInfo(m.lineId);
                       if (!m.arrowTo) return null;
                       return (
                         <g key={m.id+'arrow'}>
@@ -1315,7 +1425,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
 
                     {/* Flèche arrow-drag en cours */}
                     {interaction?.mode==='arrow-drag' && interaction.vi===vi && (()=>{
-                      const {color:mColor} = getMachinePlanInfo(interaction.lineIndex);
+                      const {color:mColor} = getMachinePlanInfo(interaction.lineId);
                       return <line x1={interaction.start.x} y1={interaction.start.y} x2={interaction.mouse.x} y2={interaction.mouse.y} stroke={mColor} strokeWidth={Math.max(0.8,1.2*s)} strokeDasharray="2,1" markerEnd={`url(#arrowhead-${vi})`} vectorEffect="non-scaling-stroke" />;
                     })()}
 
@@ -1355,7 +1465,7 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                       // Machines placées dans cette vue, par stepId
                       const machinesByStep = {};
                       view.machineLabels.forEach(m => {
-                        const item = line[m.lineIndex];
+                        const item = line.find(m2=>m2.id===m.lineId);
                         const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
                         const key = si >= 0 ? si : '__none__';
                         if (!machinesByStep[key]) machinesByStep[key] = [];
@@ -1380,9 +1490,9 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                             </div>
                             {/* Machines de cette zone */}
                             {machines.map(m => {
-                              const item = line[m.lineIndex];
+                              const item = line.find(m2=>m2.id===m.lineId);
                               const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
-                              const { letter } = getMachinePlanInfo(m.lineIndex);
+                              const { letter } = getMachinePlanInfo(m.lineId);
                               const mCircleSize = afs * 1.5;
                               return (
                                 <div key={m.id} style={{ display:"flex",alignItems:"center",gap:afs*0.45,paddingLeft:afs*0.85,marginBottom:afs*0.2 }}>
@@ -1439,7 +1549,7 @@ export default function App() {
   const [previewMode, setPreviewMode] = useState('poster'); // 'poster' | 'plan'
   const [planTool, setPlanTool] = useState('zone');         // 'zone' | 'machine'
   const [planSelStep, setPlanSelStep] = useState(0);
-  const [planSelMachine, setPlanSelMachine] = useState(0);
+  const [planSelMachine, setPlanSelMachine] = useState(null);
   const [planMachineMode, setPlanMachineMode] = useState('point'); // 'point' | 'arrow'
   const [saveModal, setSaveModal] = useState(null);     // { defaultName, onConfirm } ou null
   const [saveModalInput, setSaveModalInput] = useState('');
@@ -1641,6 +1751,29 @@ ${xhtml}
     if (parsed.technicalPlan.legendFontSize === undefined) parsed.technicalPlan.legendFontSize = 9;
     parsed.technicalPlan.views.forEach(v => { if (v.enabled === undefined) v.enabled = true; });
     if (parsed.pdfResolution !== undefined && parsed.pdfResolution <= 10) parsed.pdfResolution = 150;
+    // Migration ligne : ajouter next:[] (format DAG)
+    if (parsed.line?.length && parsed.line.every(m => m.next === undefined)) {
+      const byStep = {};
+      parsed.line.forEach(m => { const k = m.stepId||'__none__'; if (!byStep[k]) byStep[k]=[]; byStep[k].push(m); });
+      const orderedKeys = [...(parsed.steps||[]).map(s=>s.id).filter(k=>byStep[k]), ...(byStep['__none__']?['__none__']:[])];
+      const byId = Object.fromEntries(parsed.line.map(m=>[m.id, {...m, next:[]}]));
+      orderedKeys.forEach((key, ki) => {
+        const zone = byStep[key];
+        zone.forEach((m,mi) => { if (mi < zone.length-1) byId[m.id].next=[zone[mi+1].id]; });
+        if (ki < orderedKeys.length-1) byId[zone[zone.length-1].id].next=[byStep[orderedKeys[ki+1]][0].id];
+      });
+      parsed.line = Object.values(byId);
+    } else if (parsed.line) {
+      parsed.line = parsed.line.map(m => ({...m, next: m.next||[]}));
+    }
+    // Migration machineLabels : lineIndex → lineId
+    parsed.technicalPlan?.views?.forEach(v => {
+      v.machineLabels = (v.machineLabels||[]).map(m => {
+        if (m.lineId !== undefined) return m;
+        const item = (parsed.line||[])[m.lineIndex];
+        return {...m, lineId: item?.id||null, lineIndex: undefined};
+      });
+    });
     setData(parsed);
     if (parsed.version && appVersion && parsed.version !== appVersion)
       setVersionNotice(parsed.version);
