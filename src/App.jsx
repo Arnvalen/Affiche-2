@@ -358,6 +358,26 @@ const BookendPanel = ({ bookendData, type, s, qrSize, width, palette }) => {
 /* ═══════════════════ POSTER PREVIEW ═══════════════════ */
 
 /**
+ * Calcule le label final d'une machine (ex: "A", "A1", "B2") en utilisant computeLayout,
+ * identique au rendu de LineFlowBand. Utilisé dans l'éditeur, le plan technique, et les étapes.
+ */
+function getLineLabel(line, steps, itemId) {
+  if (!line?.length) return { label: '?', letter: '?', showRow: false, rowNum: 1 };
+  const { col, track, zoneSpans } = computeLayout(line, steps);
+  if (col[itemId] == null) return { label: '?', letter: '?', showRow: false, rowNum: 1 };
+  const item = line.find(m => m.id === itemId);
+  const k = item?.stepId || '__none__';
+  const localColIdx = col[itemId] - (zoneSpans[k]?.startCol ?? 0);
+  const letter = String.fromCharCode(65 + localColIdx);
+  const nodesAtCol = {};
+  line.forEach(n => { const c = col[n.id]; nodesAtCol[c] = (nodesAtCol[c]||0)+1; });
+  const showRow = (nodesAtCol[col[itemId]]||1) > 1;
+  const rowNum = (track[itemId]||0) + 1;
+  const label = showRow ? `${letter}${rowNum}` : letter;
+  return { label, letter, rowNum, showRow };
+}
+
+/**
  * Composant principal de rendu du poster.
  * Rendu à taille réelle (mm → px via MM_PX), puis réduit par transform: scale() dans App.
  * Structure verticale : Header → Légende → Contenu principal → Image bandeau → Footer.
@@ -382,10 +402,9 @@ const PosterPreview = ({ data, appVersion }) => {
   const getMachineInfo = (lineItemId) => {
     const item = (data.line||[]).find(m => m.id === lineItemId);
     if (!item) return null;
-    const zoneItems = (data.line||[]).filter(m => m.stepId === item.stepId);
-    const idx = zoneItems.findIndex(m => m.id === lineItemId);
+    const { label } = getLineLabel(data.line||[], data.steps||[], lineItemId);
     const si2 = item.stepId ? data.steps.findIndex(s => s.id === item.stepId) : -1;
-    return { letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?', color: si2 >= 0 ? getZoneColor(pal, si2, totalSteps) : '#9E9E9E' };
+    return { letter: label, color: si2 >= 0 ? getZoneColor(pal, si2, totalSteps) : '#9E9E9E' };
   };
 
   const renderStep = (step, si) => {
@@ -930,6 +949,7 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
 
 const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) => {
   const iconFileRef = useRef();
+  const [addPanel, setAddPanel] = useState(null); // { iconId, stepId, afterId } | null
 
   const upIcons = (newIcons) => onChange({ icons: newIcons, line });
   const upLine  = (newLine)  => onChange({ icons, line: newLine });
@@ -1026,11 +1046,73 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                   </div>
                   <div style={{fontSize:9,color:'#555',textAlign:'center',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ic.name}</div>
                   <span onClick={()=>removeIcon(ic.id)} style={{position:'absolute',top:2,right:4,fontSize:10,color:'#ccc',cursor:'pointer'}}>✕</span>
-                  <button onClick={()=>addToLine(ic.id)} style={{marginTop:2,fontSize:9,padding:'1px 4px',border:'1px solid #ddd',borderRadius:3,background:'#fff',cursor:'pointer',color:'#555'}}>+ Ligne</button>
+                  <button onClick={()=>setAddPanel({iconId:ic.id,stepId:null,afterId:null,beforeId:null})} style={{marginTop:2,fontSize:9,padding:'1px 4px',border:'1px solid #ddd',borderRadius:3,background:'#fff',cursor:'pointer',color:'#555'}}>+ Ligne</button>
                 </div>
               ))}
             </div>
         }
+        {/* ── Panel d'ajout rapide ── */}
+        {addPanel && (()=>{
+          const ic = icons.find(i=>i.id===addPanel.iconId);
+          const zoneOptions = steps.map((st,si)=>({
+            id:st.id, title:st.title, color:ZONE_COLORS[si%ZONE_COLORS.length],
+            machines:line.filter(m=>m.stepId===st.id)
+          }));
+          const machinesInZone = addPanel.stepId ? line.filter(m=>m.stepId===addPanel.stepId) : [];
+          return (
+            <div style={{background:'#f5f8ff',border:'2px solid #1565C0',borderRadius:8,padding:10,marginTop:4}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#1565C0',marginBottom:6}}>Ajouter : {ic?.name}</div>
+              <div style={{fontSize:9,color:'#666',marginBottom:4}}>Zone :</div>
+              <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
+                <div onClick={()=>setAddPanel({...addPanel,stepId:null,afterId:null,beforeId:null})}
+                  style={{padding:'3px 8px',borderRadius:10,fontSize:9,cursor:'pointer',
+                    background:addPanel.stepId===null?'#555':'#e0e0e0',
+                    color:addPanel.stepId===null?'#fff':'#555'}}>Sans zone</div>
+                {zoneOptions.map(z=>(
+                  <div key={z.id} onClick={()=>setAddPanel({...addPanel,stepId:z.id,afterId:null,beforeId:null})}
+                    style={{padding:'3px 8px',borderRadius:10,fontSize:9,cursor:'pointer',fontWeight:600,
+                      background:addPanel.stepId===z.id?z.color:z.color+'33',
+                      color:addPanel.stepId===z.id?'#fff':z.color}}>{z.title}</div>
+                ))}
+              </div>
+              {machinesInZone.length>0&&(()=>{
+                const chipStyle = (active) => ({padding:'3px 8px',borderRadius:10,fontSize:9,cursor:'pointer',
+                  background:active?'#333':'#e0e0e0',color:active?'#fff':'#555'});
+                const machineChips = (selectedId, onSelect) => (
+                  <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
+                    <div onClick={()=>onSelect(null)} style={chipStyle(selectedId===null)}>Aucune</div>
+                    {machinesInZone.map(m=>{
+                      const {label:ml}=getLineLabel(line,steps,m.id);
+                      const mic=icons.find(ic=>ic.id===m.iconId);
+                      return <div key={m.id} onClick={()=>onSelect(m.id)} style={chipStyle(selectedId===m.id)}>{ml} {mic?.name}</div>;
+                    })}
+                  </div>
+                );
+                return (
+                  <>
+                    <div style={{fontSize:9,color:'#666',marginBottom:4}}>Après (qui pointe vers la nouvelle) :</div>
+                    {machineChips(addPanel.afterId, id=>setAddPanel({...addPanel,afterId:id}))}
+                    <div style={{fontSize:9,color:'#666',marginBottom:4}}>Avant (vers qui pointe la nouvelle) :</div>
+                    {machineChips(addPanel.beforeId, id=>setAddPanel({...addPanel,beforeId:id}))}
+                  </>
+                );
+              })()}
+              <div style={{display:'flex',gap:6}}>
+                <Btn small onClick={()=>{
+                  const newId=uid();
+                  const newItem={id:newId,iconId:addPanel.iconId,stepId:addPanel.stepId||null,
+                    next:addPanel.beforeId?[addPanel.beforeId]:[]};
+                  const updatedLine=addPanel.afterId
+                    ?line.map(m=>m.id===addPanel.afterId?{...m,next:[...(m.next||[]),newId]}:m)
+                    :[...line];
+                  upLine([...updatedLine,newItem]);
+                  setAddPanel(null);
+                }}>Ajouter</Btn>
+                <Btn small onClick={()=>setAddPanel(null)}>Annuler</Btn>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Composition de la ligne — vue par zones ── */}
@@ -1065,7 +1147,7 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                     {zone.machines.map((item,mi)=>{
                       const icon=icons.find(ic=>ic.id===item.iconId);
                       if(!icon) return null;
-                      const letter=String.fromCharCode(65+mi);
+                      const {label:letter}=getLineLabel(line,steps,item.id);
                       return (
                         <Fragment key={item.id}>
                           {mi>0&&<span style={{color:zone.color,fontSize:20,fontWeight:900,alignSelf:'center'}}>→</span>}
@@ -1088,9 +1170,7 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                             {(item.next||[]).length>0 && (
                               <div style={{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}}>
                                 {(item.next||[]).map(nid=>{
-                                  const nm=line.find(m=>m.id===nid);
-                                  const ni=line.filter(m=>m.stepId===nm?.stepId).findIndex(m=>m.id===nid);
-                                  const nl=ni>=0?String.fromCharCode(65+ni):'?';
+                                  const {label:nl}=getLineLabel(line,steps,nid);
                                   return <span key={nid} onClick={()=>removeConnection(item.id,nid)}
                                     title="Cliquer pour supprimer" style={{fontSize:7,background:zone.color+'33',color:zone.color,borderRadius:3,padding:'1px 3px',cursor:'pointer',border:`1px solid ${zone.color}66`}}>→{nl} ✕</span>;
                                 })}
@@ -1100,8 +1180,7 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                               style={{fontSize:7,padding:'1px 2px',border:'1px dashed #ddd',borderRadius:3,maxWidth:64,color:'#888',cursor:'pointer'}}>
                               <option value="">+→</option>
                               {line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id)).map(m=>{
-                                const mzi=line.filter(li=>li.stepId===m.stepId).findIndex(li=>li.id===m.id);
-                                const ml=mzi>=0?String.fromCharCode(65+mzi):'?';
+                                const {label:ml}=getLineLabel(line,steps,m.id);
                                 const mic=icons.find(ic=>ic.id===m.iconId);
                                 return <option key={m.id} value={m.id}>{ml} {mic?.name||'?'}</option>;
                               })}
@@ -1362,17 +1441,13 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
   const icons = data.icons || [];
   const totalSteps = steps.length;
 
-  // Lettre et couleur d'une machine = relatives à sa zone (stepId), comme getMachineInfo dans PosterPreview.
+  // Lettre et couleur d'une machine — labels cohérents avec LineFlowBand via getLineLabel.
   const getMachinePlanInfo = (lineId) => {
     const item = line.find(m => m.id === lineId);
     if (!item) return { letter:'?', color:pal.primary };
-    const zoneItems = line.filter(m => m.stepId === item.stepId);
-    const idx = zoneItems.findIndex(m => m.id === item.id);
+    const { label } = getLineLabel(line, steps, lineId);
     const si = item.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
-    return {
-      letter: idx >= 0 ? String.fromCharCode(65 + idx) : '?',
-      color: si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary,
-    };
+    return { letter: label, color: si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary };
   };
 
   // Helpers geometry
