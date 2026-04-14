@@ -12,7 +12,7 @@
  * Tous les styles sont inline (objets React) pour simplifier les exports
  * SVG/PDF qui capturent le DOM directement.
  */
-import { useState, useRef, useCallback, useEffect, useMemo, Fragment } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, Fragment, Component } from "react";
 import { produce } from "immer";        // Copie structurale pour up() — remplace JSON.parse/stringify
 import QRCode from "qrcode";            // Génération de la matrice QR
 // html-to-image et jsPDF : chargés dynamiquement à l'export (voir exportPNG/exportPDF)
@@ -113,9 +113,23 @@ const getPalette = id => PALETTES.find(p => p.id === id) || PALETTES[0];
 /** Générateur d'IDs uniques pour les éléments du modèle de données */
 let _id = 120; const uid = () => `_${_id++}`;
 
-/** Supprime width/height fixes du SVG root et force width:100%;height:100% pour qu'il remplisse son conteneur sans déformation. */
-/** Convertit un SVG texte en data URL pour utilisation dans <img>. Le navigateur gère le scaling nativement (height fixe + width:auto = ratio conservé). */
+/** Convertit un SVG texte en data URL pour utilisation dans <img> ou <image>. */
 const svgUrl = (svgData) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgData)}`;
+
+/** Extrait le ratio naturel (largeur/hauteur) d'un SVG à partir de viewBox ou width/height.
+ *  Retourne 1 si indéterminé. Utilisé pour afficher les icônes sans déformation dans la bande. */
+const getSVGRatio = (svgData) => {
+  if (!svgData) return 1;
+  const vb = svgData.match(/viewBox=["']([^"']+)["']/);
+  if (vb) {
+    const p = vb[1].trim().split(/[\s,]+/).map(Number);
+    if (p.length >= 4 && p[3]) return p[2] / p[3];
+  }
+  const wm = svgData.match(/\bwidth=["']([0-9.]+)["']/);
+  const hm = svgData.match(/\bheight=["']([0-9.]+)["']/);
+  if (wm && hm) { const w = parseFloat(wm[1]), h = parseFloat(hm[1]); if (w && h) return w / h; }
+  return 1;
+};
 
 /** Composant image SVG scalée : height fixe en px, width auto, centrée. */
 const SvgIcon = ({ svgData, height, style }) => (
@@ -493,7 +507,7 @@ const PosterPreview = ({ data, appVersion }) => {
             <img src={data.backgroundImage} alt="" style={{maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block"}} />
           </div>
         );
-        return <LineFlowBand data={data} bh={bh} s={s} pal={pal} posterW={posterW} />;
+        return <LineFlowErrorBoundary bh={bh}><LineFlowBand data={data} bh={bh} s={s} pal={pal} posterW={posterW} /></LineFlowErrorBoundary>;
       })()}
 
       {/* Footer */}
@@ -606,137 +620,304 @@ const defaultData = () => ({
 
 /* ═══════════════════ DAG LAYOUT ENGINE ═══════════════════ */
 
-function computeLayout(nodes) {
-  if (!nodes.length) return { col:{}, track:{}, numCols:0, maxTracks:1 };
+// Colonnes = profondeur DAG (flux horizontal gauche→droite), avec forçage de l'ordre inter-zones.
+// Lignes  = branches parallèles : chaque split secondaire obtient une nouvelle ligne.
+// Label   = lettre de colonne (dans la zone) + numéro de ligne si parallèles, ex : A1, B2, C.
+function computeLayout(nodes, steps) {
+  if (!nodes.length) return { col:{}, track:{}, numCols:1, maxTracks:1, zoneSpans:{}, zoneKeys:[] };
+
+  const stepIds = (steps||[]).map(s=>s.id);
+  const zk = n => n.stepId || '__none__';
+
+  // Grouper par zone (préserve l'ordre de data.line dans chaque zone)
+  const byZone = {};
+  nodes.forEach(n => { const k=zk(n); if(!byZone[k])byZone[k]=[]; byZone[k].push(n); });
+  const zoneKeys = [...stepIds.filter(k=>byZone[k]), ...(byZone['__none__']?['__none__']:[])];
+
+  // Prédécesseurs + topologie
   const byId = Object.fromEntries(nodes.map(n=>[n.id,n]));
-  const pred = Object.fromEntries(nodes.map(n=>[n.id, new Set()]));
-  nodes.forEach(n => (n.next||[]).forEach(nid => { if (pred[nid]) pred[nid].add(n.id); }));
-  const inDeg = Object.fromEntries(nodes.map(n=>[n.id, pred[n.id].size]));
-  const queue = nodes.filter(n=>inDeg[n.id]===0).map(n=>n.id);
+  const pred = Object.fromEntries(nodes.map(n=>[n.id, []]));
+  nodes.forEach(n => (n.next||[]).forEach(nid => { if(pred[nid]) pred[nid].push(n.id); }));
+  const inDeg = Object.fromEntries(nodes.map(n=>[n.id, pred[n.id].length]));
+  const q = nodes.filter(n=>inDeg[n.id]===0).map(n=>n.id);
   const topo = [];
-  while (queue.length) {
-    const id = queue.shift(); topo.push(id);
-    (byId[id]?.next||[]).forEach(nid => { if (byId[nid]) { inDeg[nid]--; if (!inDeg[nid]) queue.push(nid); } });
+  while (q.length) {
+    const id = q.shift(); topo.push(id);
+    (byId[id]?.next||[]).forEach(nid => { if(byId[nid]) { inDeg[nid]--; if(!inDeg[nid]) q.push(nid); } });
   }
-  // Nodes not reached (cycles) append at end
-  nodes.forEach(n => { if (!topo.includes(n.id)) topo.push(n.id); });
+  nodes.forEach(n => { if(!topo.includes(n.id)) topo.push(n.id); });
+
+  // Profondeur DAG brute (plus long chemin depuis une source)
+  const rawD = {};
+  topo.forEach(id => { rawD[id] = pred[id].length ? Math.max(...pred[id].map(p=>rawD[p]+1)) : 0; });
+
+  // Colonnes absolues : profondeur brute + décalage de zone (respect de l'ordre des étapes)
   const col = {};
-  topo.forEach(id => { col[id] = pred[id].size ? Math.max(...[...pred[id]].map(p=>(col[p]||0)+1)) : 0; });
-  const byCol = {};
-  topo.forEach(id => { const c=col[id]||0; if (!byCol[c]) byCol[c]=[]; byCol[c].push(id); });
+  const zoneSpans = {};
+  let zoneStart = 0;
+  zoneKeys.forEach(k => {
+    const zn = byZone[k];
+    const minR = Math.min(...zn.map(n=>rawD[n.id]||0));
+    const off  = Math.max(0, zoneStart - minR);
+    zn.forEach(n => { col[n.id] = (rawD[n.id]||0) + off; });
+    const maxC = Math.max(...zn.map(n=>col[n.id]));
+    const minC = Math.min(...zn.map(n=>col[n.id]));
+    zoneSpans[k] = { startCol: minC, endCol: maxC };
+    zoneStart = maxC + 2;  // col suivant + 1 col de gap entre zones
+  });
+
+  // Lignes (tracks) : locales par colonne — chaque colonne repart de 0
+  // → les zones sur des colonnes distinctes réutilisent les mêmes indices de ligne
   const track = {};
-  Object.values(byCol).forEach(grp => grp.forEach((id,ti) => { track[id]=ti; }));
-  const numCols = topo.length ? Math.max(...Object.values(col))+1 : 0;
-  const maxTracks = Object.values(byCol).reduce((m,g)=>Math.max(m,g.length),1);
-  return { col, track, numCols, maxTracks };
+  const colUsed = {};  // colUsed[col] = Set des lignes déjà prises dans cette colonne
+
+  const allocTrack = (c) => {
+    const used = colUsed[c] || new Set();
+    let t = 0; while (used.has(t)) t++;
+    return t;
+  };
+  const assignTrack = (id, t) => {
+    track[id] = t;
+    const c = col[id];
+    if (!colUsed[c]) colUsed[c] = new Set();
+    colUsed[c].add(t);
+  };
+
+  topo.forEach(id => {
+    const ps = pred[id];
+    const c = col[id];
+    if (ps.length === 0) {
+      assignTrack(id, allocTrack(c));
+    } else if (ps.length === 1) {
+      const pId = ps[0];
+      const isPrimary = (byId[pId]?.next||[])[0] === id;
+      const preferred = isPrimary ? (track[pId] ?? 0) : null;
+      if (preferred !== null && !(colUsed[c]?.has(preferred))) {
+        assignTrack(id, preferred);
+      } else {
+        assignTrack(id, allocTrack(c));
+      }
+    } else {
+      // merge → minimum des tracks de prédécesseurs, si libre dans cette colonne
+      const minP = Math.min(...ps.map(p => track[p] ?? 0));
+      if (!(colUsed[c]?.has(minP))) {
+        assignTrack(id, minP);
+      } else {
+        assignTrack(id, allocTrack(c));
+      }
+    }
+  });
+
+  const numCols  = nodes.length ? Math.max(...nodes.map(n=>col[n.id]))+1 : 1;
+  const maxTracks= nodes.length ? Math.max(...nodes.map(n=>track[n.id]))+1 : 1;
+  return { col, track, numCols, maxTracks, zoneSpans, zoneKeys };
 }
 
 /* ═══════════════════ LINE FLOW BAND (SVG) ═══════════════════ */
 
+class LineFlowErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { err: false }; }
+  static getDerivedStateFromError() { return { err: true }; }
+  componentDidCatch(e) { console.error('LineFlowBand:', e); }
+  render() {
+    if (this.state.err)
+      return <div style={{height:this.props.bh,background:'#fafafa',borderTop:'1px solid #eee',
+        display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#999'}}>
+        Erreur de rendu (voir console)</div>;
+    return this.props.children;
+  }
+}
+
 const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
   const nodes = data.line || [];
-  const layout = useMemo(() => computeLayout(nodes), [nodes]);
-  const { col, track, numCols, maxTracks } = layout;
+  const steps = data.steps || [];
+  const layout = useMemo(() => computeLayout(nodes, steps), [nodes, steps]);
+  const { col, track, numCols, maxTracks, zoneSpans, zoneKeys } = layout;
   if (!nodes.length) return null;
 
-  const pad = 10 * s;
+  // ── Dimensionnement ──────────────────────────────────────────
+  const pad = 8 * s;
   const availW = posterW - pad * 2;
-  const colW = numCols > 0 ? availW / numCols : availW;
-  const rowH = bh / maxTracks;
-  const nodeW = Math.min(colW * 0.72, rowH * 0.8);
-  const iconH = nodeW * 0.75;
-  const letterR = Math.max(8, 10 * s);
+  const letterR = Math.max(6, 9 * s);
+  const nameH = 9 * s;
+  const topMargin = letterR * 2 + 4 * s;
+  const arrowLen = 7 * s;  // longueur de la tête de flèche
+  // Espace utile dans la zone (sous le label de zone, au-dessus du bord bas)
+  const zoneH = bh - topMargin - 2 * s;
+  // Hauteur par track — dans la zone uniquement
+  const rowH  = zoneH / maxTracks;
 
-  const cx = id => pad + (col[id]||0) * colW + colW / 2;
-  const cy = id => (track[id]||0) * rowH + rowH / 2;
+  // ── Deux largeurs de colonnes : nœuds (larges) vs gaps inter-zone (étroits) ─
+  // nodesAtCol : nb de nœuds par colonne absolue (pour labels et largeur)
+  const nodesAtCol = {};
+  nodes.forEach(n => { const c = col[n.id]; nodesAtCol[c] = (nodesAtCol[c]||0) + 1; });
+  const occupiedCols = new Set(Object.keys(nodesAtCol).map(Number));
+  const gapCount     = numCols - occupiedCols.size;
+  const nodeColCount = occupiedCols.size;
+  // Colonnes de gap : juste assez pour passer les flèches
+  const gapW = Math.max(arrowLen * 3 + 4 * s, 20 * s);
+  // iconSize = hauteur disponible dans la zone (indépendant de la largeur de colonne)
+  const iconSize = Math.max(12, rowH - letterR * 2 - nameH - 10 * s);
+  // nodeColW = icône + petite marge (colonne serrée), plafonné au rawNodeColW si espace insuffisant
+  const rawNodeColW = nodeColCount > 0 ? (availW - gapCount * gapW) / nodeColCount : availW;
+  const nodeColW    = Math.min(rawNodeColW, Math.max(16 * s, iconSize + 8 * s));
+  // Espace libéré → marges latérales (layout centré)
+  const totalW  = nodeColCount * nodeColW + gapCount * gapW;
+  const hPad    = pad + Math.max(0, availW - totalW) / 2;
 
-  // Zone background rects grouped by stepId
-  const steps = data.steps || [];
+  // Positions X pré-calculées (bords gauches + droit final de toutes les colonnes)
+  const _colStarts = (() => {
+    const a = []; let x = hPad;
+    for (let i = 0; i < numCols; i++) { a.push(x); x += occupiedCols.has(i) ? nodeColW : gapW; }
+    a.push(x);  // a[numCols] = bord droit de la dernière colonne
+    return a;
+  })();
+  const colLeft = (ci) => _colStarts[Math.min(ci, numCols)] ?? (hPad + totalW);
+  const colCx   = (ci) => _colStarts[ci] + (occupiedCols.has(ci) ? nodeColW : gapW) / 2;
+
+  const cx = id => colCx(col[id] || 0);
+  // cy = centre de l'icône, ancré en bas de sa sous-ligne (dans la zone)
+  const cy = id => {
+    const t = track[id] || 0;
+    const rowBottomY = topMargin + (t + 1) * rowH - 2 * s;
+    return rowBottomY - nameH - 6 * s - iconSize / 2;
+  };
+
   const totalSteps = steps.length;
-  const zoneRects = [];
-  const byStep = {};
-  nodes.forEach(n => { const k=n.stepId||'__none__'; if (!byStep[k]) byStep[k]=[]; byStep[k].push(n); });
-  Object.entries(byStep).forEach(([key, grp]) => {
-    if (key === '__none__') return;
-    const si = steps.findIndex(s=>s.id===key);
-    const color = si>=0 ? getZoneColor(pal,si,totalSteps) : '#9E9E9E';
-    const xs = grp.map(n=>cx(n.id));
-    const ys = grp.map(n=>cy(n.id));
-    const x1 = Math.min(...xs) - nodeW/2 - 4*s;
-    const y1 = Math.min(...ys) - rowH/2 + 2*s;
-    const x2 = Math.max(...xs) + nodeW/2 + 4*s;
-    const y2 = Math.max(...ys) + rowH/2 - 2*s;
-    // Zone label (number or title)
-    const labelText = (data.lineZoneLabel||'number')==='title' ? (steps[si]?.title||'?') : String(si+1);
-    zoneRects.push({ key, color, x1, y1, x2, y2, si, labelText });
-  });
+  const arrowId = 'lf-arr-' + (pal.primary||'').replace(/[^a-zA-Z0-9]/g,'');
 
-  const arrowId = 'lf-arr-' + (pal.primary||'').replace('#','');
+  // ── Helpers flèches ───────────────────────────────────────────
+  // Demi-largeur visuelle de l'icône d'un nœud (ancre les flèches au bord de l'icône)
+  const getIconHalfW = (n) => {
+    const icon = (data.icons||[]).find(ic => ic.id === n.iconId);
+    if (!icon) return iconSize * 0.5;
+    const r = getSVGRatio(icon.svgData);
+    const iSz = iconSize * (n.size || 1);
+    return Math.min(iSz * r, nodeColW * 0.88) / 2;
+  };
 
   return (
     <svg width={posterW} height={bh} style={{flexShrink:0,display:'block',background:'#fafafa',borderTop:'1px solid #eee',overflow:'hidden'}}>
       <defs>
-        <marker id={arrowId} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto" markerUnits="strokeWidth">
-          <path d="M0,0 L0,6 L5,3 z" fill={pal.accent||pal.primary} />
+        {/* Triangle plein — refX=0 : la BASE est à la fin du chemin, la POINTE s'avance
+            → le trait finit exactement sous la base, invisible sous le triangle rempli */}
+        <marker id={arrowId}
+          markerWidth={arrowLen} markerHeight={5*s}
+          refX={0} refY={2.5*s}
+          orient="auto" markerUnits="userSpaceOnUse">
+          <path d={`M0,0 L0,${5*s} L${arrowLen},${2.5*s} z`} fill={pal.accent||pal.primary} />
         </marker>
       </defs>
 
-      {/* Zone backgrounds */}
-      {zoneRects.map(z => (
-        <g key={z.key}>
-          <rect x={z.x1} y={z.y1} width={z.x2-z.x1} height={z.y2-z.y1}
-            rx={5*s} fill={z.color+'18'} stroke={z.color} strokeWidth={1.5*s} />
-          {(data.lineZoneLabel||'number')==='title'
-            ? <text x={(z.x1+z.x2)/2} y={z.y1-3*s} textAnchor="middle" fill={z.color}
-                fontSize={9*s} fontWeight={700} fontFamily="sans-serif"
-                style={{textTransform:'uppercase',letterSpacing:1}}>{z.labelText}</text>
-            : <g transform={`translate(${(z.x1+z.x2)/2},${z.y1-letterR-2*s})`}>
-                <circle r={letterR} fill={z.color}/>
-                <text textAnchor="middle" dy="0.35em" fill="#fff" fontSize={13*s} fontWeight={700} fontFamily="monospace">{z.labelText}</text>
-              </g>
+      {/* ── 1. Zone backgrounds — rect couvrant startCol→endCol ── */}
+      {zoneKeys.map((k) => {
+        if (k === '__none__') return null;
+        const si = steps.findIndex(st=>st.id===k);
+        if (si < 0) return null;
+        const color = getZoneColor(pal, si, totalSteps);
+        const { startCol, endCol } = zoneSpans[k];
+        const rx = colLeft(startCol);
+        const rw = colLeft(endCol + 1) - colLeft(startCol);
+        const ry = topMargin;
+        const rh = bh - topMargin - 2 * s;
+        const labelText = (data.lineZoneLabel||'number')==='title' ? (steps[si]?.title||'?') : String(si+1);
+        const labelX = rx + rw / 2;
+        return (
+          <g key={k}>
+            <rect x={rx} y={ry} width={rw} height={rh}
+              rx={5*s} fill={color+'18'} stroke={color} strokeWidth={1.5*s} />
+            {(data.lineZoneLabel||'number')==='title'
+              ? <text x={labelX} y={ry-3*s} textAnchor="middle" fill={color}
+                  fontSize={Math.max(7,9*s)} fontWeight={700} fontFamily="sans-serif">{labelText}</text>
+              : <g transform={`translate(${labelX},${letterR + s})`}>
+                  <circle r={letterR} fill={color}/>
+                  <text textAnchor="middle" dy="0.35em" fill="#fff" fontSize={Math.max(8,12*s)} fontWeight={700} fontFamily="monospace">{labelText}</text>
+                </g>
+            }
+          </g>
+        );
+      })}
+
+      {/* ── 2. Arêtes — tracé orthogonal (suit la grille) ──────── */}
+      {nodes.map(n => {
+        const srcNexts = n.next || [];
+        const fanCnt = srcNexts.length;
+        return srcNexts.map((nid, fanOutIdx) => {
+          const tgt = nodes.find(m => m.id === nid);
+          if (!tgt) return null;
+          const si = n.stepId ? steps.findIndex(st => st.id === n.stepId) : -1;
+          const color = si >= 0 ? getZoneColor(pal, si, totalSteps) : (pal.accent || pal.primary);
+          const sw = Math.max(1, 1.5 * s);
+          // Sortie juste après le bord droit de l'icône source
+          const exitX = cx(n.id) + getIconHalfW(n) + 2 * s;
+          // La POINTE de la flèche s'arrête juste avant le bord gauche de l'icône cible.
+          // Le CHEMIN s'arrête à (tipX - arrowLen) = BASE du triangle, qui cache la fin du trait.
+          const tipX     = cx(tgt.id) - getIconHalfW(tgt) - 2 * s;
+          const pathEndX = tipX - arrowLen;
+          if (pathEndX <= exitX) return null;  // pas assez de place
+          const srcY = cy(n.id);
+          const tgtY = cy(tgt.id);
+          let d;
+          if (Math.abs(srcY - tgtY) < 1) {
+            // Même ligne → trait horizontal
+            d = `M${exitX},${srcY} H${pathEndX}`;
+          } else {
+            // Lignes différentes → orthogonal H-V-H
+            // Chaque flèche reçoit un couloir X distinct pour éviter la superposition verticale
+            const gapFrac = fanCnt > 1 ? (fanOutIdx + 1) / (fanCnt + 1) : 0.5;
+            const laneX = exitX + (pathEndX - exitX) * gapFrac;
+            d = `M${exitX},${srcY} H${laneX} V${tgtY} H${pathEndX}`;
           }
-        </g>
-      ))}
+          return <path key={n.id + '-' + nid} d={d} fill="none"
+            stroke={color} strokeWidth={sw} markerEnd={`url(#${arrowId})`} />;
+        });
+      })}
 
-      {/* Edges */}
-      {nodes.map(n => (n.next||[]).map(nid => {
-        const target = nodes.find(m=>m.id===nid);
-        if (!target) return null;
-        const x1=cx(n.id)+nodeW*0.38, y1=cy(n.id);
-        const x2=cx(nid)-nodeW*0.38, y2=cy(nid);
-        const si = n.stepId ? steps.findIndex(s=>s.id===n.stepId) : -1;
-        const color = si>=0 ? getZoneColor(pal,si,totalSteps) : (pal.accent||pal.primary);
-        return <line key={n.id+'-'+nid} x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke={color} strokeWidth={Math.max(1,1.5*s)} markerEnd={`url(#${arrowId})`} />;
-      }))}
-
-      {/* Nodes */}
+      {/* ── 3. Nœuds ─────────────────────────────────────────── */}
       {nodes.map(n => {
         const icon = (data.icons||[]).find(ic=>ic.id===n.iconId);
         if (!icon) return null;
-        const si = n.stepId ? steps.findIndex(s=>s.id===n.stepId) : -1;
+        const si = n.stepId ? steps.findIndex(st=>st.id===n.stepId) : -1;
         const color = si>=0 ? getZoneColor(pal,si,totalSteps) : '#9E9E9E';
-        const zoneItems = nodes.filter(m=>m.stepId===n.stepId);
-        const sorted = zoneItems.slice().sort((a,b)=>(track[a.id]||0)-(track[b.id]||0));
-        const letter = String.fromCharCode(65+Math.max(0,sorted.findIndex(m=>m.id===n.id)));
-        const iH = iconH * (n.size||1);
+        // Lettre = colonne locale dans la zone (A=1ère col, B=2ème…)
+        const k = n.stepId || '__none__';
+        const localColIdx = col[n.id] - (zoneSpans[k]?.startCol ?? 0);
+        const letter = String.fromCharCode(65 + localColIdx);
+        // Numéro de ligne affiché seulement si plusieurs nœuds partagent la même colonne
+        const rowNum = (track[n.id]||0) + 1;
+        const showRow = (nodesAtCol[col[n.id]]||1) > 1;
+        const label = showRow ? `${letter}${rowNum}` : letter;
+        const iSz = iconSize * (n.size||1);
         const x = cx(n.id); const y = cy(n.id);
-        // Tags (linked operation)
-        const linkedOp = data.showLineTags!==false ? (()=>{ for(const st of (data.steps||[])) for(const op of (st.operations||[])) if(op.lineItemId===n.id) return op; return null; })() : null;
+        const linkedOp = data.showLineTags!==false
+          ? (()=>{ for(const st of steps) for(const op of (st.operations||[])) if(op.lineItemId===n.id) return op; return null; })()
+          : null;
+        // Dimensions naturelles de l'icône (ratio extrait du SVG)
+        const ratio = getSVGRatio(icon.svgData);
+        const rawW = iSz * ratio;
+        const imgW = Math.min(rawW, nodeColW * 0.88);   // cap à la largeur de colonne
+        const imgH = imgW / ratio;                    // hauteur ajustée si la largeur a été réduite
         return (
           <g key={n.id}>
-            <image href={svgUrl(icon.svgData)} x={x-iH/2} y={y-iH/2} width={iH} height={iH} />
-            <circle cx={x} cy={y-iH/2-letterR-1} r={letterR} fill={color}/>
-            <text x={x} y={y-iH/2-letterR-1} textAnchor="middle" dy="0.35em" fill="#fff"
-              fontSize={Math.max(8,13*s)} fontWeight={700} fontFamily="monospace">{letter}</text>
-            <text x={x} y={y+iH/2+9*s} textAnchor="middle" fill="#555"
-              fontSize={8*s} fontWeight={600} fontFamily="sans-serif"
+            {/* Icône — ratio naturel préservé */}
+            <image href={svgUrl(icon.svgData)}
+              x={x-imgW/2} y={y-imgH/2} width={imgW} height={imgH}
+              preserveAspectRatio="xMidYMid meet" />
+            {/* Badge lettre (+ numéro de ligne si parallèles) */}
+            <circle cx={x} cy={y-imgH/2-letterR-1*s} r={letterR} fill={color}/>
+            <text x={x} y={y-imgH/2-letterR-1*s} textAnchor="middle" dy="0.35em" fill="#fff"
+              fontSize={Math.max(5, Math.min(12*s, letterR*1.4))} fontWeight={700} fontFamily="monospace">{label}</text>
+            {/* Nom */}
+            <text x={x} y={y+imgH/2+8*s} textAnchor="middle" fill="#555"
+              fontSize={Math.max(6,8*s)} fontWeight={600} fontFamily="sans-serif"
               style={{dominantBaseline:'hanging'}}>{icon.name}</text>
+            {/* Tags */}
             {linkedOp && (linkedOp.tags||[]).length>0 && linkedOp.tags.map((t,ti)=>{
               const tc = TAG_COLORS[t.type]||{bg:'#eee',color:'#333',border:'#ccc'};
-              const tw = 24*s; const th = 12*s;
-              return <rect key={t.id} x={x+(ti-linkedOp.tags.length/2+0.5)*tw-tw/2} y={y-iH/2-letterR*2-th-2}
-                width={tw} height={th} rx={3} fill={tc.bg} stroke={tc.border} strokeWidth={0.5}/>;
+              const tw = Math.max(16, 20*s); const th = Math.max(8, 11*s);
+              return <rect key={t.id}
+                x={x+(ti-linkedOp.tags.length/2+0.5)*tw-tw/2} y={y-imgH/2-letterR*2-th-1*s}
+                width={tw} height={th} rx={2} fill={tc.bg} stroke={tc.border} strokeWidth={0.5}/>;
             })}
           </g>
         );
