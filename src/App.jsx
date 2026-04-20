@@ -306,7 +306,13 @@ const StepsEditor = ({ steps, onChange, line, icons }) => {
                   <select value={op.lineItemId||''} onChange={e=>up(d=>{d.find(x=>x.id===step.id).operations.find(o=>o.id===op.id).lineItemId=e.target.value||null;})}
                     style={{fontSize:10,padding:"2px 4px",border:"1px solid #ddd",borderRadius:3,flex:1}}>
                     <option value="">— Aucune —</option>
-                    {(line||[]).map(m=>{const ic=(icons||[]).find(i=>i.id===m.iconId);return <option key={m.id} value={m.id}>{ic?.name||m.id}</option>;})}
+                    {(()=>{
+                      const sortLabel=lbl=>{const m=lbl.match(/^([A-Z]+)(\d*)$/);return m?[m[1],parseInt(m[2]||0,10)]:['',0];};
+                      return (line||[])
+                        .map(m=>({m,lbl:getLineLabel(line,steps,m.id).label,ic:(icons||[]).find(i=>i.id===m.iconId)}))
+                        .sort((a,b)=>{const[al,an]=sortLabel(a.lbl),[bl,bn]=sortLabel(b.lbl);return al<bl?-1:al>bl?1:an-bn;})
+                        .map(({m,lbl,ic})=><option key={m.id} value={m.id}>{lbl} · {ic?.name||m.id}</option>);
+                    })()}
                   </select>
                 </div>
               )}
@@ -769,15 +775,28 @@ function computeLayout(nodes, steps) {
     }
   });
 
-  // Réordonner les tracks PAR ZONE : dans chaque zone, la branche la plus longue → track 0 (haut).
+  // Réordonner les tracks PAR ZONE : branche la plus longue → track 0 (haut).
+  // Tiebreak sur même compte : le track qui contient une machine connectée à une autre zone passe en premier.
   // Remappage local à chaque zone — aucun ID ni lien modifié.
   zoneKeys.forEach(k => {
     const zn = byZone[k];
     const zoneCnt = {};
-    zn.forEach(n => { const t = track[n.id]??0; zoneCnt[t]=(zoneCnt[t]||0)+1; });
-    const sorted = Object.keys(zoneCnt).map(Number).sort((a,b)=>zoneCnt[b]-zoneCnt[a]);
-    const remap = Object.fromEntries(sorted.map((oldT,newT)=>[oldT,newT]));
-    zn.forEach(n => { track[n.id] = remap[track[n.id]??0] ?? (track[n.id]??0); });
+    const crossZoneTracks = new Set();
+    zn.forEach(n => {
+      const t = track[n.id] ?? 0;
+      zoneCnt[t] = (zoneCnt[t] || 0) + 1;
+      const hasCross =
+        (n.next||[]).some(nid => (byId[nid]?.stepId||'__none__') !== k) ||
+        pred[n.id].some(pid  => (byId[pid]?.stepId ||'__none__') !== k);
+      if (hasCross) crossZoneTracks.add(t);
+    });
+    const sorted = Object.keys(zoneCnt).map(Number).sort((a, b) => {
+      const cntDiff = zoneCnt[b] - zoneCnt[a];
+      if (cntDiff !== 0) return cntDiff;
+      return (crossZoneTracks.has(b) ? 1 : 0) - (crossZoneTracks.has(a) ? 1 : 0);
+    });
+    const remap = Object.fromEntries(sorted.map((oldT, newT) => [oldT, newT]));
+    zn.forEach(n => { track[n.id] = remap[track[n.id] ?? 0] ?? (track[n.id] ?? 0); });
   });
 
   const numCols  = nodes.length ? Math.max(...nodes.map(n=>col[n.id]))+1 : 1;
@@ -1428,20 +1447,24 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
               style={{ width:"100%",marginTop:4,padding:"5px 8px",borderRadius:4,border:"1.5px solid #ddd",fontSize:12,fontFamily:"inherit" }}>
               <option value="">— choisir —</option>
               {(()=>{
-                // Trier par stepIndex (ordre des étapes) puis par lettre dans la zone
-                const sorted = line.map(item=>{
-                  const step = steps.find(s => s.id === item.stepId);
-                  const si = step ? steps.indexOf(step) : Infinity;
-                  const zoneItems = line.filter(m => m.stepId === item.stepId);
-                  const idx = zoneItems.findIndex(m => m.id === item.id);
-                  const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
-                  return { item, si, idx, letter, step };
-                }).sort((a,b) => a.si !== b.si ? a.si - b.si : a.idx - b.idx);
-                return sorted.map(({ item, letter, step }) => {
-                  const icon = (icons||[]).find(ic=>ic.id===item.iconId);
-                  const zoneLabel = step ? step.title : 'sans zone';
-                  return <option key={item.id} value={item.id}>{zoneLabel} — {letter} · {icon?.name||"Machine"}</option>;
-                });
+                const lineArr = data.line||[], stepsArr = data.steps||[];
+                const sortLabel = lbl => { const m=lbl.match(/^([A-Z]+)(\d*)$/); return m?[m[1],parseInt(m[2]||0,10)]:['',0]; };
+                const zoneOrder = [...stepsArr.map(s=>s.id), null];
+                const grouped = zoneOrder.map(sid => ({
+                  sid,
+                  label: sid ? (stepsArr.find(s=>s.id===sid)?.title||'') : 'Sans zone',
+                  machines: lineArr
+                    .filter(m=>(m.stepId||null)===sid)
+                    .map(m=>({ m, lbl:getLineLabel(lineArr,stepsArr,m.id).label, ic:(data.icons||[]).find(ic=>ic.id===m.iconId) }))
+                    .sort((a,b)=>{ const[al,an]=sortLabel(a.lbl),[bl,bn]=sortLabel(b.lbl); return al<bl?-1:al>bl?1:an-bn; })
+                })).filter(g=>g.machines.length>0);
+                return grouped.map(g=>(
+                  <optgroup key={g.sid||'__none__'} label={g.label}>
+                    {g.machines.map(({m,lbl,ic})=>(
+                      <option key={m.id} value={m.id}>{lbl} · {ic?.name||"Machine"}</option>
+                    ))}
+                  </optgroup>
+                ));
               })()}
             </select>
           </div>
@@ -1507,9 +1530,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
             {v.machineLabels.map((m,i) => {
               const item = line.find(m2=>m2.id===m.lineId);
               const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
-              const zoneItems = line.filter(li => li.stepId === item?.stepId);
-              const idx = zoneItems.findIndex(li => li.id === item?.id);
-              const letter = idx >= 0 ? String.fromCharCode(65+idx) : '?';
+              const { label: letter } = item ? getLineLabel(line, steps, item.id) : { label: '?' };
               const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
               const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
               return (
