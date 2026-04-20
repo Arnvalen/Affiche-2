@@ -671,18 +671,60 @@ function computeLayout(nodes, steps) {
   topo.forEach(id => { rawD[id] = pred[id].length ? Math.max(...pred[id].map(p=>rawD[p]+1)) : 0; });
 
   // Colonnes absolues : profondeur brute + décalage de zone (respect de l'ordre des étapes)
+  // Les nœuds isolés (aucune connexion entrante ni sortante) sont placés en fin de zone
+  // pour ne pas perturber l'offset des nœuds connectés.
   const col = {};
   const zoneSpans = {};
   let zoneStart = 0;
   zoneKeys.forEach(k => {
     const zn = byZone[k];
-    const minR = Math.min(...zn.map(n=>rawD[n.id]||0));
-    const off  = Math.max(0, zoneStart - minR);
-    zn.forEach(n => { col[n.id] = (rawD[n.id]||0) + off; });
-    const maxC = Math.max(...zn.map(n=>col[n.id]));
-    const minC = Math.min(...zn.map(n=>col[n.id]));
-    zoneSpans[k] = { startCol: minC, endCol: maxC };
-    zoneStart = maxC + 2;  // col suivant + 1 col de gap entre zones
+    const connected = zn.filter(n => pred[n.id].length > 0 || (n.next||[]).length > 0);
+    const isolated  = zn.filter(n => pred[n.id].length === 0 && (n.next||[]).length === 0);
+    let zoneEndCol = zoneStart;
+
+    if (connected.length > 0) {
+      // Regrouper les nœuds connectés en composantes connexes INTERNES à la zone.
+      // Chaque composante calcule son propre offset (minR indépendant).
+      // → évite qu'une chaîne A2→B2 (rawD=0,1) pollue l'offset de J→K→…→P (rawD=9+).
+      const zoneNodeIds = new Set(zn.map(n => n.id));
+      const compOf = {};
+      const components = [];
+      connected.forEach(n => {
+        if (compOf[n.id] !== undefined) return;
+        const comp = [];
+        const q = [n.id];
+        const seen = new Set([n.id]);
+        while (q.length) {
+          const id = q.shift();
+          compOf[id] = components.length;
+          comp.push(byId[id]);
+          (byId[id]?.next||[]).forEach(nid => {
+            if (!seen.has(nid) && zoneNodeIds.has(nid)) { seen.add(nid); q.push(nid); }
+          });
+          pred[id].forEach(pid => {
+            if (!seen.has(pid) && zoneNodeIds.has(pid)) { seen.add(pid); q.push(pid); }
+          });
+        }
+        components.push(comp);
+      });
+
+      components.forEach(comp => {
+        const minR = Math.min(...comp.map(n => rawD[n.id]||0));
+        const off  = Math.max(0, zoneStart - minR);
+        comp.forEach(n => { col[n.id] = (rawD[n.id]||0) + off; });
+        zoneEndCol = Math.max(zoneEndCol, ...comp.map(n => col[n.id]));
+      });
+    }
+
+    // Nœuds isolés : placés en colonne A de la zone (= colonne des sources)
+    // → label A_n où n = prochain track disponible à cette colonne
+    const colA = connected.length > 0
+      ? Math.min(...connected.map(n=>col[n.id]))
+      : zoneStart;
+    isolated.forEach(n => { col[n.id] = colA; });
+    const allCols = zn.map(n=>col[n.id]);
+    zoneSpans[k] = { startCol: Math.min(...allCols), endCol: Math.max(...allCols) };
+    zoneStart = Math.max(...allCols) + 2;
   });
 
   // Lignes (tracks) : locales par colonne — chaque colonne repart de 0
@@ -725,6 +767,17 @@ function computeLayout(nodes, steps) {
         assignTrack(id, allocTrack(c));
       }
     }
+  });
+
+  // Réordonner les tracks PAR ZONE : dans chaque zone, la branche la plus longue → track 0 (haut).
+  // Remappage local à chaque zone — aucun ID ni lien modifié.
+  zoneKeys.forEach(k => {
+    const zn = byZone[k];
+    const zoneCnt = {};
+    zn.forEach(n => { const t = track[n.id]??0; zoneCnt[t]=(zoneCnt[t]||0)+1; });
+    const sorted = Object.keys(zoneCnt).map(Number).sort((a,b)=>zoneCnt[b]-zoneCnt[a]);
+    const remap = Object.fromEntries(sorted.map((oldT,newT)=>[oldT,newT]));
+    zn.forEach(n => { track[n.id] = remap[track[n.id]??0] ?? (track[n.id]??0); });
   });
 
   const numCols  = nodes.length ? Math.max(...nodes.map(n=>col[n.id]))+1 : 1;
@@ -882,9 +935,12 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
             d = `M${exitX},${srcY} H${pathEndX}`;
           } else {
             // Lignes différentes → orthogonal H-V-H
-            // Chaque flèche reçoit un couloir X distinct pour éviter la superposition verticale
-            const gapFrac = fanCnt > 1 ? (fanOutIdx + 1) / (fanCnt + 1) : 0.5;
-            const laneX = exitX + (pathEndX - exitX) * gapFrac;
+            // Le segment vertical est placé au bord gauche de la colonne cible :
+            // cela évite tout chevauchement avec les nœuds intermédiaires (ex. B3→D ne passe plus sur C).
+            const tgtColLeft = colLeft(col[tgt.id]);
+            const laneX = tgtColLeft >= exitX
+              ? tgtColLeft   // cible à droite : transition verticale au bord de sa colonne
+              : exitX + (pathEndX - exitX) * (fanCnt > 1 ? (fanOutIdx + 1) / (fanCnt + 1) : 0.5); // cible à gauche : fallback milieu
             d = `M${exitX},${srcY} H${laneX} V${tgtY} H${pathEndX}`;
           }
           return <path key={n.id + '-' + nid} d={d} fill="none"
@@ -947,7 +1003,7 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
 
 /* ═══════════════════ LINE FLOW EDITOR ═══════════════════ */
 
-const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) => {
+const LineEditor = ({ icons, line, steps, onChange, onRemoveMachine, onRemoveIcon, libSvgFiles, onLoadSvg }) => {
   const iconFileRef = useRef();
   const [addPanel, setAddPanel] = useState(null); // { iconId, stepId, afterId } | null
 
@@ -971,9 +1027,12 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
 
   const addToLine = (iconId) => upLine([...line, { id:uid(), iconId, stepId:null, next:[] }]);
   const removeFromLine = (id) => {
+    if (onRemoveMachine) { onRemoveMachine(id); return; }
     upLine(line.filter(m => m.id !== id).map(m => ({...m, next:(m.next||[]).filter(nid=>nid!==id)})));
   };
   const removeIcon = (iconId) => {
+    const removedIds = line.filter(m => m.iconId === iconId).map(m => m.id);
+    if (onRemoveIcon && removedIds.length) { onRemoveIcon(iconId, removedIds); return; }
     upIcons(icons.filter(ic => ic.id !== iconId));
     upLine(line.filter(m => m.iconId !== iconId));
   };
@@ -1078,13 +1137,16 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
               {machinesInZone.length>0&&(()=>{
                 const chipStyle = (active) => ({padding:'3px 8px',borderRadius:10,fontSize:9,cursor:'pointer',
                   background:active?'#333':'#e0e0e0',color:active?'#fff':'#555'});
+                const sortLabel = (lbl) => { const m=lbl.match(/^([A-Z]+)(\d*)$/); return m?[m[1],parseInt(m[2]||0,10)]:['',0]; };
+                const sortedMachinesInZone = [...machinesInZone]
+                  .map(m=>({m, lbl:getLineLabel(line,steps,m.id).label}))
+                  .sort((a,b)=>{ const [al,an]=sortLabel(a.lbl); const [bl,bn]=sortLabel(b.lbl); return al<bl?-1:al>bl?1:an-bn; });
                 const machineChips = (selectedId, onSelect) => (
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',marginBottom:6}}>
                     <div onClick={()=>onSelect(null)} style={chipStyle(selectedId===null)}>Aucune</div>
-                    {machinesInZone.map(m=>{
-                      const {label:ml}=getLineLabel(line,steps,m.id);
+                    {sortedMachinesInZone.map(({m,lbl})=>{
                       const mic=icons.find(ic=>ic.id===m.iconId);
-                      return <div key={m.id} onClick={()=>onSelect(m.id)} style={chipStyle(selectedId===m.id)}>{ml} {mic?.name}</div>;
+                      return <div key={m.id} onClick={()=>onSelect(m.id)} style={chipStyle(selectedId===m.id)}>{lbl} {mic?.name}</div>;
                     })}
                   </div>
                 );
@@ -1133,84 +1195,113 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
             </div>
           );
 
+          // Layout DAG — calculé une fois pour toutes les zones
+          const layout = computeLayout(line, steps);
+          const { col: dagCol, track: dagTrack, zoneSpans } = layout;
+
           return (
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              {zones.map(zone=>(
-                <div key={zone.step?.id||'unlinked'} style={{borderRadius:8,border:`2px solid ${zone.color}`,background:zone.color+'12',padding:'8px'}}>
-                  {/* Titre de zone en haut */}
-                  <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
-                    <div style={{background:zone.color,color:'#fff',fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10}}>
-                      {zone.step?.title||'Sans zone'}
-                    </div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'flex-start',gap:4,flexWrap:'wrap'}}>
-                    {zone.machines.map((item,mi)=>{
-                      const icon=icons.find(ic=>ic.id===item.iconId);
-                      if(!icon) return null;
-                      const {label:letter}=getLineLabel(line,steps,item.id);
-                      return (
-                        <Fragment key={item.id}>
-                          {mi>0&&<span style={{color:zone.color,fontSize:20,fontWeight:900,alignSelf:'center'}}>→</span>}
-                          <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'#fafafa',border:'1px solid #eee',borderRadius:6,padding:'6px 8px',minWidth:60}}>
-                            <div style={{width:16,height:16,borderRadius:'50%',background:zone.color,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{letter}</div>
-                            <SvgIcon svgData={icon.svgData} height={32} />
-                            <span style={{fontSize:8,color:'#555',textAlign:'center',maxWidth:56,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{icon.name}</span>
-                            <select value={item.stepId||''} onChange={e=>updateLineItem(item.id,{stepId:e.target.value||null})}
-                              style={{fontSize:8,padding:'1px 2px',border:'1px solid #ddd',borderRadius:3,maxWidth:64}}>
-                              <option value="">— —</option>
-                              {steps.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-                            </select>
+              {zones.map(zone=>{
+                const k = zone.step?.id || '__none__';
+                const startCol = zoneSpans[k]?.startCol ?? 0;
 
-                            <div style={{display:'flex',gap:2}}>
-                              <span onClick={()=>moveInZone(item.id,-1)} style={{cursor:'pointer',fontSize:10,color:'#aaa',padding:'0 2px'}}>←</span>
-                              <span onClick={()=>moveInZone(item.id,1)}  style={{cursor:'pointer',fontSize:10,color:'#aaa',padding:'0 2px'}}>→</span>
-                              <span onClick={()=>removeFromLine(item.id)} style={{cursor:'pointer',fontSize:9,color:'#ccc',padding:'0 2px'}}>✕</span>
+                // Grouper les machines par colonne locale (= profondeur dans la zone)
+                const byLocalCol = {};
+                zone.machines.forEach(item => {
+                  const lc = (dagCol[item.id] ?? 0) - startCol;
+                  if (!byLocalCol[lc]) byLocalCol[lc] = [];
+                  byLocalCol[lc].push(item);
+                });
+                // Colonnes triées gauche→droite, machines triées par track dans chaque colonne
+                const columns = Object.keys(byLocalCol)
+                  .map(Number).sort((a,b)=>a-b)
+                  .map(lc => byLocalCol[lc].slice().sort((a,b)=>(dagTrack[a.id]??0)-(dagTrack[b.id]??0)));
+
+                return (
+                  <div key={zone.step?.id||'unlinked'} style={{borderRadius:8,border:`2px solid ${zone.color}`,background:zone.color+'12',padding:'8px'}}>
+                    {/* Titre de zone */}
+                    <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
+                      <div style={{background:zone.color,color:'#fff',fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10}}>
+                        {zone.step?.title||'Sans zone'}
+                      </div>
+                    </div>
+                    {/* Vue colonne-flux */}
+                    <div style={{display:'flex',alignItems:'flex-start',gap:0,overflowX:'auto',paddingBottom:4}}>
+                      {columns.map((colMachines, ci)=>(
+                        <Fragment key={ci}>
+                          {/* Flèche entre colonnes */}
+                          {ci>0 && (
+                            <div style={{display:'flex',alignItems:'center',alignSelf:'stretch',padding:'0 4px'}}>
+                              <span style={{color:zone.color,fontSize:18,fontWeight:900}}>→</span>
                             </div>
-                            {/* Connexions sortantes */}
-                            {(item.next||[]).length>0 && (
-                              <div style={{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}}>
-                                {(item.next||[]).map(nid=>{
-                                  const {label:nl}=getLineLabel(line,steps,nid);
-                                  return <span key={nid} onClick={()=>removeConnection(item.id,nid)}
-                                    title="Cliquer pour supprimer" style={{fontSize:7,background:zone.color+'33',color:zone.color,borderRadius:3,padding:'1px 3px',cursor:'pointer',border:`1px solid ${zone.color}66`}}>→{nl} ✕</span>;
-                                })}
-                              </div>
-                            )}
-                            <select value="" onChange={e=>{if(e.target.value)addConnection(item.id,e.target.value);}}
-                              style={{fontSize:7,padding:'1px 2px',border:'1px dashed #ddd',borderRadius:3,maxWidth:64,color:'#888',cursor:'pointer'}}>
-                              <option value="">+→</option>
-                              {(()=>{
-                                const candidates = line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id));
-                                const sortLabel = (lbl) => { const m=lbl.match(/^([A-Z]+)(\d*)$/); return m?[m[1],parseInt(m[2]||0,10)]:['',0]; };
-                                const zoneOrder = [...steps.map(s=>s.id), null];
-                                const grouped = zoneOrder.map(sid => ({
-                                  sid,
-                                  label: sid ? (steps.find(s=>s.id===sid)?.title||'') : 'Sans zone',
-                                  machines: candidates
-                                    .filter(m=>(m.stepId||null)===sid)
-                                    .map(m=>({m, lbl:getLineLabel(line,steps,m.id).label, ic:icons.find(ic=>ic.id===m.iconId)}))
-                                    .sort((a,b)=>{ const [al,an]=sortLabel(a.lbl); const [bl,bn]=sortLabel(b.lbl); return al<bl?-1:al>bl?1:an-bn; })
-                                })).filter(g=>g.machines.length>0);
-                                return grouped.map(g=>(
-                                  <optgroup key={g.sid||'__none__'} label={g.label}>
-                                    {g.machines.map(({m,lbl,ic})=>(
-                                      <option key={m.id} value={m.id}>{lbl} {ic?.name||'?'}</option>
-                                    ))}
-                                  </optgroup>
-                                ));
-                              })()}
-                            </select>
+                          )}
+                          {/* Colonne : machines empilées verticalement */}
+                          <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                            {colMachines.map(item=>{
+                              const icon=icons.find(ic=>ic.id===item.iconId);
+                              if(!icon) return null;
+                              const {label:letter}=getLineLabel(line,steps,item.id);
+                              return (
+                                <div key={item.id} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,background:'#fafafa',border:'1px solid #eee',borderRadius:6,padding:'6px 8px',minWidth:60}}>
+                                  <div style={{width:16,height:16,borderRadius:'50%',background:zone.color,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>{letter}</div>
+                                  <SvgIcon svgData={icon.svgData} height={32} />
+                                  <span style={{fontSize:8,color:'#555',textAlign:'center',maxWidth:56,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{icon.name}</span>
+                                  <select value={item.stepId||''} onChange={e=>updateLineItem(item.id,{stepId:e.target.value||null})}
+                                    style={{fontSize:8,padding:'1px 2px',border:'1px solid #ddd',borderRadius:3,maxWidth:64}}>
+                                    <option value="">— —</option>
+                                    {steps.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
+                                  </select>
+                                  <div style={{display:'flex',gap:2}}>
+                                    <span onClick={()=>removeFromLine(item.id)} style={{cursor:'pointer',fontSize:9,color:'#ccc',padding:'0 2px'}}>✕</span>
+                                  </div>
+                                  {/* Connexions sortantes */}
+                                  {(item.next||[]).length>0 && (
+                                    <div style={{display:'flex',flexWrap:'wrap',gap:2,justifyContent:'center'}}>
+                                      {(item.next||[]).map(nid=>{
+                                        const {label:nl}=getLineLabel(line,steps,nid);
+                                        return <span key={nid} onClick={()=>removeConnection(item.id,nid)}
+                                          title="Cliquer pour supprimer" style={{fontSize:7,background:zone.color+'33',color:zone.color,borderRadius:3,padding:'1px 3px',cursor:'pointer',border:`1px solid ${zone.color}66`}}>→{nl} ✕</span>;
+                                      })}
+                                    </div>
+                                  )}
+                                  <select value="" onChange={e=>{if(e.target.value)addConnection(item.id,e.target.value);}}
+                                    style={{fontSize:7,padding:'1px 2px',border:'1px dashed #ddd',borderRadius:3,maxWidth:64,color:'#888',cursor:'pointer'}}>
+                                    <option value="">+→</option>
+                                    {(()=>{
+                                      const candidates = line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id));
+                                      const sortLabel = (lbl) => { const m=lbl.match(/^([A-Z]+)(\d*)$/); return m?[m[1],parseInt(m[2]||0,10)]:['',0]; };
+                                      const zoneOrder = [...steps.map(s=>s.id), null];
+                                      const grouped = zoneOrder.map(sid => ({
+                                        sid,
+                                        label: sid ? (steps.find(s=>s.id===sid)?.title||'') : 'Sans zone',
+                                        machines: candidates
+                                          .filter(m=>(m.stepId||null)===sid)
+                                          .map(m=>({m, lbl:getLineLabel(line,steps,m.id).label, ic:icons.find(ic=>ic.id===m.iconId)}))
+                                          .sort((a,b)=>{ const [al,an]=sortLabel(a.lbl); const [bl,bn]=sortLabel(b.lbl); return al<bl?-1:al>bl?1:an-bn; })
+                                      })).filter(g=>g.machines.length>0);
+                                      return grouped.map(g=>(
+                                        <optgroup key={g.sid||'__none__'} label={g.label}>
+                                          {g.machines.map(({m,lbl,ic})=>(
+                                            <option key={m.id} value={m.id}>{lbl} {ic?.name||'?'}</option>
+                                          ))}
+                                        </optgroup>
+                                      ));
+                                    })()}
+                                  </select>
+                                </div>
+                              );
+                            })}
                           </div>
                         </Fragment>
-                      );
-                    })}
-                    {/* Drop target pour ajouter une machine dans cette zone */}
-                    <div onDragOver={e=>e.preventDefault()}
-                      onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('iconId');if(id){const stepId=zone.step?.id||null;upLine([...line,{id:uid(),iconId:id,stepId,next:[]}]);}}}
-                      style={{width:40,height:56,border:'2px dashed #ddd',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:20,cursor:'copy',alignSelf:'center'}}>+</div>
+                      ))}
+                      {/* Drop target pour ajouter une machine dans cette zone */}
+                      <div onDragOver={e=>e.preventDefault()}
+                        onDrop={e=>{e.preventDefault();const id=e.dataTransfer.getData('iconId');if(id){const stepId=zone.step?.id||null;upLine([...line,{id:uid(),iconId:id,stepId,next:[]}]);}}}
+                        style={{width:40,height:56,border:'2px dashed #ddd',borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',color:'#ccc',fontSize:20,cursor:'copy',alignSelf:'center',marginLeft:4}}>+</div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               {/* Zone de drop globale pour les nouvelles icônes sans step */}
               <div onDragOver={e=>e.preventDefault()} onDrop={onDropZone}
                 style={{border:'2px dashed #e0e0e0',borderRadius:6,padding:'6px 10px',display:'flex',alignItems:'center',justifyContent:'center',color:'#bbb',fontSize:10,cursor:'copy'}}>
@@ -2090,7 +2181,7 @@ ${xhtml}
           <div style={{ display:"flex",flexWrap:"wrap",borderBottom:"1px solid #e0e0e0" }}>
             {tabs.map(t=><button key={t.key} onClick={()=>setTab(t.key)} style={{ flex:1,minWidth:56,padding:"8px 4px",border:"none",borderBottom:tab===t.key?"2.5px solid #C8102E":"2.5px solid transparent",background:tab===t.key?"#FFF5F5":"transparent",color:tab===t.key?"#C8102E":"#888",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1 }}><span style={{ fontSize:14 }}>{t.icon}</span>{t.label}</button>)}
           </div>
-          <div style={{ flex:1,overflowY:"auto",padding:12,zoom:Math.min(1.8,Math.max(1,sidebarWidth/360)).toFixed(3) }}>
+          <div style={{ flex:1,overflowY:"auto",padding:12,zoom:tab==='line'?1:Math.min(1.8,Math.max(1,sidebarWidth/360)).toFixed(3) }}>
             {versionNotice && (
               <div style={{ marginBottom:8,padding:"8px 12px",background:"#FFF3E0",border:"1px solid #FF9800",borderRadius:6,fontSize:11,color:"#E65100",display:"flex",alignItems:"center",gap:8 }}>
                 <span style={{ flex:1 }}>⚠ Document créé avec v{versionNotice} — version actuelle : v{appVersion}</span>
@@ -2218,7 +2309,20 @@ ${xhtml}
             {tab === "entree" && <BookendEditor data={data.entree} onChange={entree=>up(d=>{d.entree=entree;})} />}
             {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={steps=>up(d=>{d.steps=steps;})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
-            {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps} onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})} libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
+            {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps}
+                onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})}
+                onRemoveMachine={id=>up(d=>{
+                  d.line=(d.line||[]).filter(m=>m.id!==id).map(m=>({...m,next:(m.next||[]).filter(nid=>nid!==id)}));
+                  (d.technicalPlan?.views||[]).forEach(v=>{v.machineLabels=(v.machineLabels||[]).filter(ml=>ml.lineId!==id);});
+                  (d.steps||[]).forEach(st=>(st.operations||[]).forEach(op=>{if(op.lineItemId===id)op.lineItemId=null;}));
+                })}
+                onRemoveIcon={(iconId,removedIds)=>up(d=>{
+                  d.icons=(d.icons||[]).filter(ic=>ic.id!==iconId);
+                  d.line=(d.line||[]).filter(m=>m.iconId!==iconId).map(m=>({...m,next:(m.next||[]).filter(nid=>!removedIds.includes(nid))}));
+                  (d.technicalPlan?.views||[]).forEach(v=>{v.machineLabels=(v.machineLabels||[]).filter(ml=>!removedIds.includes(ml.lineId));});
+                  (d.steps||[]).forEach(st=>(st.operations||[]).forEach(op=>{if(removedIds.includes(op.lineItemId))op.lineItemId=null;}));
+                })}
+                libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
             {tab === "plan" && <TechnicalPlanEditor data={data} up={up} planTool={planTool} setPlanTool={setPlanTool} planSelStep={planSelStep} setPlanSelStep={setPlanSelStep} planSelMachine={planSelMachine} setPlanSelMachine={setPlanSelMachine} planMachineMode={planMachineMode} setPlanMachineMode={setPlanMachineMode} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
