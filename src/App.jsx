@@ -1137,10 +1137,10 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
               {zones.map(zone=>(
                 <div key={zone.step?.id||'unlinked'} style={{borderRadius:8,border:`2px solid ${zone.color}`,background:zone.color+'12',padding:'8px'}}>
-                  {/* Numéro centré en haut */}
+                  {/* Titre de zone en haut */}
                   <div style={{display:'flex',justifyContent:'center',marginBottom:6}}>
-                    <div style={{width:18,height:18,borderRadius:'50%',background:zone.color,color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center'}}>
-                      {zone.stepIndex>=0?zone.stepIndex+1:'?'}
+                    <div style={{background:zone.color,color:'#fff',fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:10}}>
+                      {zone.step?.title||'Sans zone'}
                     </div>
                   </div>
                   <div style={{display:'flex',alignItems:'flex-start',gap:4,flexWrap:'wrap'}}>
@@ -1179,11 +1179,26 @@ const LineEditor = ({ icons, line, steps, onChange, libSvgFiles, onLoadSvg }) =>
                             <select value="" onChange={e=>{if(e.target.value)addConnection(item.id,e.target.value);}}
                               style={{fontSize:7,padding:'1px 2px',border:'1px dashed #ddd',borderRadius:3,maxWidth:64,color:'#888',cursor:'pointer'}}>
                               <option value="">+→</option>
-                              {line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id)).map(m=>{
-                                const {label:ml}=getLineLabel(line,steps,m.id);
-                                const mic=icons.find(ic=>ic.id===m.iconId);
-                                return <option key={m.id} value={m.id}>{ml} {mic?.name||'?'}</option>;
-                              })}
+                              {(()=>{
+                                const candidates = line.filter(m=>m.id!==item.id&&!(item.next||[]).includes(m.id));
+                                const sortLabel = (lbl) => { const m=lbl.match(/^([A-Z]+)(\d*)$/); return m?[m[1],parseInt(m[2]||0,10)]:['',0]; };
+                                const zoneOrder = [...steps.map(s=>s.id), null];
+                                const grouped = zoneOrder.map(sid => ({
+                                  sid,
+                                  label: sid ? (steps.find(s=>s.id===sid)?.title||'') : 'Sans zone',
+                                  machines: candidates
+                                    .filter(m=>(m.stepId||null)===sid)
+                                    .map(m=>({m, lbl:getLineLabel(line,steps,m.id).label, ic:icons.find(ic=>ic.id===m.iconId)}))
+                                    .sort((a,b)=>{ const [al,an]=sortLabel(a.lbl); const [bl,bn]=sortLabel(b.lbl); return al<bl?-1:al>bl?1:an-bn; })
+                                })).filter(g=>g.machines.length>0);
+                                return grouped.map(g=>(
+                                  <optgroup key={g.sid||'__none__'} label={g.label}>
+                                    {g.machines.map(({m,lbl,ic})=>(
+                                      <option key={m.id} value={m.id}>{lbl} {ic?.name||'?'}</option>
+                                    ))}
+                                  </optgroup>
+                                ));
+                              })()}
                             </select>
                           </div>
                         </Fragment>
