@@ -262,7 +262,7 @@ const BookendEditor = ({ data, onChange }) => {
           <Btn small outline color="#888" onClick={()=>up(d=>{d.sections.find(x=>x.id===sec.id).items.push({id:uid(),name:"Nouveau",tags:[]});})}>+ Élément</Btn>
         </SectionCard>
       ))}
-      <Btn small outline color="#555" onClick={()=>up(d=>d.sections.push({id:uid(),title:"Nouvelle catégorie",items:[]}))}>+ Catégorie</Btn>
+      <Btn small outline color="#555" onClick={()=>up(d=>{d.sections.push({id:uid(),title:"Nouvelle catégorie",items:[]});})}>+ Catégorie</Btn>
     </div>
   );
 };
@@ -322,7 +322,7 @@ const StepsEditor = ({ steps, onChange, line, icons }) => {
           <Btn small outline color="#1565C0" onClick={()=>up(d=>{d.find(x=>x.id===step.id).operations.push({id:uid(),isControlPoint:true,name:"Point de contrôle",description:"",tags:[]});})}>+ PC</Btn>
         </SectionCard>
       ))}
-      <Btn onClick={()=>up(d=>d.push({id:uid(),title:"Nouvelle étape",tags:[],operations:[]}))} style={{ alignSelf:"flex-start" }}>+ Étape process</Btn>
+      <Btn onClick={()=>up(d=>{d.push({id:uid(),title:"Nouvelle étape",tags:[],operations:[]});})} style={{ alignSelf:"flex-start" }}>+ Étape process</Btn>
     </div>
   );
 };
@@ -2328,7 +2328,7 @@ ${xhtml}
               </div>
             )}
             {tab === "entree" && <BookendEditor data={data.entree} onChange={entree=>up(d=>{d.entree=entree;})} />}
-            {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={steps=>up(d=>{d.steps=steps;})} />}
+            {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={newSteps=>up(d=>{const deleted=new Set(d.steps.filter(s=>!newSteps.find(ns=>ns.id===s.id)).map(s=>s.id));d.steps=newSteps;if(deleted.size>0)(d.line||[]).forEach(m=>{if(deleted.has(m.stepId))m.stepId=null;});})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
             {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps}
                 onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})}
