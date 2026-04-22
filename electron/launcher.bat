@@ -9,7 +9,7 @@ set "APPDIR=%LOCALAPPDATA%\NexansAffiche"
 set "SRC=%~dp0Nexans Affiche-win32-x64"
 set "LIBRARY=%~dp0library"
 set "VERSION_FILE=%APPDIR%\.version"
-set "VERSION=1.1.1"
+set "VERSION=1.1.2"
 
 echo.
 if exist "%APPDIR%\app\resources\nexans-ascii.txt" (
