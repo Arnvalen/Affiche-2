@@ -532,7 +532,7 @@ const PosterPreview = ({ data, appVersion }) => {
             <img src={data.backgroundImage} alt="" style={{maxWidth:"100%",maxHeight:bh,objectFit:"contain",display:"block"}} />
           </div>
         );
-        return <LineFlowErrorBoundary bh={bh}><LineFlowBand data={data} bh={bh} s={s} pal={pal} posterW={posterW} /></LineFlowErrorBoundary>;
+        return <div style={{marginBottom:4*s,flexShrink:0}}><LineFlowErrorBoundary bh={bh}><LineFlowBand data={data} bh={bh} s={s} pal={pal} posterW={posterW} /></LineFlowErrorBoundary></div>;
       })()}
 
       {/* Footer */}
@@ -561,7 +561,7 @@ const emptyData = () => ({
   steps: [], backgroundImage: "", icons: [], line: [], version: "",
   technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
-    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
+    { id:"side", label:"Vue de face",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
   ]},
 });
 
@@ -637,7 +637,7 @@ const defaultData = () => ({
   line: [], version: "",
   technicalPlan: { zoneLabel:"number", gridSize:5, legendFontSize:9, views: [
     { id:"top",  label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
-    { id:"side", label:"Vue de côté",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
+    { id:"side", label:"Vue de face",   imageDataUrl:null, stepZones:[], machineLabels:[], enabled:true },
   ]},
 });
 
@@ -849,22 +849,40 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
   const gapW = Math.max(arrowLen * 3 + 4 * s, 20 * s);
   // iconSize = hauteur disponible dans la zone (indépendant de la largeur de colonne)
   const iconSize = Math.max(12, rowH - letterR * 2 - nameH - 10 * s);
-  // nodeColW = icône + petite marge (colonne serrée), plafonné au rawNodeColW si espace insuffisant
+  // nodeColW = référence de cap (comportement max, comme avant)
   const rawNodeColW = nodeColCount > 0 ? (availW - gapCount * gapW) / nodeColCount : availW;
   const nodeColW    = Math.min(rawNodeColW, Math.max(16 * s, iconSize + 8 * s));
+
+  // Largeur max d'icône rendue par colonne (icônes fines → colonnes étroites)
+  const colMaxImgW = {};
+  occupiedCols.forEach(c => {
+    const nodesInCol = nodes.filter(n => (col[n.id] ?? 0) === c);
+    colMaxImgW[c] = Math.max(8*s, ...nodesInCol.map(n => {
+      const icon = (data.icons||[]).find(ic => ic.id === n.iconId);
+      if (!icon) return iconSize * 0.5;
+      const r = getSVGRatio(icon.svgData);
+      return Math.min(iconSize * (n.size||1) * r, nodeColW * 0.9);
+    }));
+  });
+  // Espacement bord-à-bord fixe entre icônes adjacentes (configurable via data.lineEdgeGap)
+  const minEdgeGap = Math.max((data.lineEdgeGap ?? 14) * s, arrowLen * 2);
+  // Largeur variable par colonne nœud = largeur icône max + gap fixe
+  const colW = {};
+  occupiedCols.forEach(c => { colW[c] = colMaxImgW[c] + minEdgeGap; });
+
   // Espace libéré → marges latérales (layout centré)
-  const totalW  = nodeColCount * nodeColW + gapCount * gapW;
-  const hPad    = pad + Math.max(0, availW - totalW) / 2;
+  const totalW = [...occupiedCols].reduce((sum, c) => sum + colW[c], 0) + gapCount * gapW;
+  const hPad   = pad + Math.max(0, availW - totalW) / 2;
 
   // Positions X pré-calculées (bords gauches + droit final de toutes les colonnes)
   const _colStarts = (() => {
     const a = []; let x = hPad;
-    for (let i = 0; i < numCols; i++) { a.push(x); x += occupiedCols.has(i) ? nodeColW : gapW; }
+    for (let i = 0; i < numCols; i++) { a.push(x); x += occupiedCols.has(i) ? colW[i] : gapW; }
     a.push(x);  // a[numCols] = bord droit de la dernière colonne
     return a;
   })();
   const colLeft = (ci) => _colStarts[Math.min(ci, numCols)] ?? (hPad + totalW);
-  const colCx   = (ci) => _colStarts[ci] + (occupiedCols.has(ci) ? nodeColW : gapW) / 2;
+  const colCx   = (ci) => _colStarts[ci] + (occupiedCols.has(ci) ? (colW[ci] ?? gapW) : gapW) / 2;
 
   const cx = id => colCx(col[id] || 0);
   // cy = centre de l'icône, ancré en bas de sa sous-ligne (dans la zone)
@@ -884,7 +902,8 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
     if (!icon) return iconSize * 0.5;
     const r = getSVGRatio(icon.svgData);
     const iSz = iconSize * (n.size || 1);
-    return Math.min(iSz * r, nodeColW * 0.88) / 2;
+    const cw = colW[col[n.id] ?? 0] ?? nodeColW;
+    return Math.min(iSz * r, cw * 0.88) / 2;
   };
 
   return (
@@ -954,12 +973,20 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
             d = `M${exitX},${srcY} H${pathEndX}`;
           } else {
             // Lignes différentes → orthogonal H-V-H
-            // Le segment vertical est placé au bord gauche de la colonne cible :
-            // cela évite tout chevauchement avec les nœuds intermédiaires (ex. B3→D ne passe plus sur C).
             const tgtColLeft = colLeft(col[tgt.id]);
-            const laneX = tgtColLeft >= exitX
-              ? tgtColLeft   // cible à droite : transition verticale au bord de sa colonne
-              : exitX + (pathEndX - exitX) * (fanCnt > 1 ? (fanOutIdx + 1) / (fanCnt + 1) : 0.5); // cible à gauche : fallback milieu
+            let laneX;
+            if (tgtColLeft >= exitX) {
+              const crossZone = (n.stepId||'__none__') !== (tgt.stepId||'__none__');
+              if (crossZone) {
+                // Cross-zone : transition verticale au centre du gap entre les deux zones
+                const gapCol = col[tgt.id] - 1;
+                laneX = (!occupiedCols.has(gapCol) && gapCol >= 0) ? colCx(gapCol) : tgtColLeft;
+              } else {
+                laneX = tgtColLeft;
+              }
+            } else {
+              laneX = exitX + (pathEndX - exitX) * (fanCnt > 1 ? (fanOutIdx + 1) / (fanCnt + 1) : 0.5);
+            }
             d = `M${exitX},${srcY} H${laneX} V${tgtY} H${pathEndX}`;
           }
           return <path key={n.id + '-' + nid} d={d} fill="none"
@@ -989,7 +1016,8 @@ const LineFlowBand = ({ data, bh, s, pal, posterW }) => {
         // Dimensions naturelles de l'icône (ratio extrait du SVG)
         const ratio = getSVGRatio(icon.svgData);
         const rawW = iSz * ratio;
-        const imgW = Math.min(rawW, nodeColW * 0.88);   // cap à la largeur de colonne
+        const cw = colW[col[n.id] ?? 0] ?? nodeColW;
+        const imgW = Math.min(rawW, cw * 0.88);   // cap à la largeur de colonne
         const imgH = imgW / ratio;                    // hauteur ajustée si la largeur a été réduite
         return (
           <g key={n.id}>
@@ -1348,7 +1376,7 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
 
   const tp = data.technicalPlan || { zoneLabel:"number", gridSize:5, views:[
     { id:"top",label:"Vue de dessus",imageDataUrl:null,stepZones:[],machineLabels:[] },
-    { id:"side",label:"Vue de côté",imageDataUrl:null,stepZones:[],machineLabels:[] },
+    { id:"side",label:"Vue de face",imageDataUrl:null,stepZones:[],machineLabels:[] },
   ]};
   const view = tp.views[activeView] || { stepZones:[], machineLabels:[] };
   const steps = data.steps || [];
@@ -1403,12 +1431,12 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
           <button key={v.id} onClick={()=>setActiveView(i)} style={{ flex:1,padding:"6px 8px",borderRadius:5,fontSize:11,fontWeight:600,cursor:"pointer",border:activeView===i?"2px solid #C8102E":"1.5px solid #ddd",background:activeView===i?"#FFF5F5":"#fff",color:activeView===i?"#C8102E":"#666" }}>{v.label}</button>
         ))}
       </div>
-      {/* Vue de côté optionnelle */}
+      {/* Vue de face optionnelle */}
       <label style={{ display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:11,color:"#555" }}>
         <input type="checkbox" checked={tp.views[1]?.enabled !== false}
           onChange={e=>up(d=>{d.technicalPlan.views[1].enabled=e.target.checked;})}
           style={{ accentColor:"#C8102E",width:14,height:14 }} />
-        Afficher la vue de côté
+        Afficher la vue de face
       </label>
 
       {/* Import image */}
@@ -1511,39 +1539,45 @@ const TechnicalPlanEditor = ({ data, up, planTool, setPlanTool, planSelStep, set
         )}
       </div>
 
-      {/* Annotations existantes */}
-      {tp.views.map((v, vi) => {
-        if (v.stepZones.length === 0 && v.machineLabels.length === 0) return null;
-        return (
-          <SectionCard key={v.id} title={`Annotations — ${v.label}`} defaultOpen={vi===activeView}>
-            {v.stepZones.map((z,i) => {
-              const color = totalSteps>0 ? getZoneColor(pal, z.stepIndex, totalSteps) : "#999";
-              const step = steps[z.stepIndex];
-              return (
-                <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                  <div style={{ width:14,height:14,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
-                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
-                  <span onClick={()=>up(d=>{d.technicalPlan.views[vi].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-                </div>
-              );
-            })}
-            {v.machineLabels.map((m,i) => {
-              const item = line.find(m2=>m2.id===m.lineId);
-              const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
-              const { label: letter } = item ? getLineLabel(line, steps, item.id) : { label: '?' };
-              const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
-              const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
-              return (
-                <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
-                  <div style={{ width:14,height:14,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
-                  <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}{m.arrowTo?' →':''}</span>
-                  <span onClick={()=>up(d=>{d.technicalPlan.views[vi].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
-                </div>
-              );
-            })}
-          </SectionCard>
-        );
-      })}
+      {/* Annotations existantes — toutes vues confondues */}
+      {tp.views.some(v => v.stepZones.length > 0 || v.machineLabels.length > 0) && (
+        <SectionCard title="Annotations" defaultOpen={true}>
+          {tp.views.map((v, vi) => {
+            const hasAny = v.stepZones.length > 0 || v.machineLabels.length > 0;
+            if (!hasAny) return null;
+            return (
+              <div key={v.id}>
+                <div style={{ fontSize:10,fontWeight:700,color:"#999",textTransform:"uppercase",letterSpacing:0.5,marginBottom:3,marginTop:vi>0?8:0 }}>{v.label}</div>
+                {v.stepZones.map((z,i) => {
+                  const color = totalSteps>0 ? getZoneColor(pal, z.stepIndex, totalSteps) : "#999";
+                  const step = steps[z.stepIndex];
+                  return (
+                    <div key={z.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                      <div style={{ width:14,height:14,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{z.stepIndex+1}</div>
+                      <span style={{ flex:1,fontSize:11,color:"#555" }}>{step?.title||"—"}</span>
+                      <span onClick={()=>up(d=>{d.technicalPlan.views[vi].stepZones.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+                    </div>
+                  );
+                })}
+                {v.machineLabels.map((m,i) => {
+                  const item = line.find(m2=>m2.id===m.lineId);
+                  const icon = (icons||[]).find(ic => ic.id === (item||{}).iconId);
+                  const { label: letter } = item ? getLineLabel(line, steps, item.id) : { label: '?' };
+                  const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+                  const mColor = si >= 0 ? getZoneColor(pal, si, totalSteps) : pal.primary;
+                  return (
+                    <div key={m.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"4px 0",borderBottom:"1px solid #f0f0f0" }}>
+                      <div style={{ width:14,height:14,borderRadius:"50%",background:mColor,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,flexShrink:0 }}>{letter}</div>
+                      <span style={{ flex:1,fontSize:11,color:"#555" }}>{icon?.name||"Machine"}{m.arrowTo?' →':''}</span>
+                      <span onClick={()=>up(d=>{d.technicalPlan.views[vi].machineLabels.splice(i,1);})} style={{ cursor:"pointer",fontSize:12,color:"#ccc",padding:"0 4px" }}>✕</span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </SectionCard>
+      )}
     </div>
   );
 };
@@ -1703,8 +1737,10 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
         })}
       </div>
 
-      {/* Corps : vues empilées */}
-      <div style={{ flex:1,display:"flex",flexDirection:"column",padding:`${10*s}px`,gap:14*s }}>
+      {/* Corps : vues à gauche + légende commune à droite */}
+      <div style={{ flex:1,display:"flex",padding:`${10*s}px`,gap:10*s,minHeight:0 }}>
+        {/* Colonne des vues empilées */}
+        <div style={{ flex:3,display:"flex",flexDirection:"column",gap:14*s,minWidth:0 }}>
         {tp.views.every(v=>!v.imageDataUrl) && (
           <div style={{ flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#bbb",fontSize:14*s,fontStyle:"italic" }}>
             Importer des images dans l'onglet 📐 Plan
@@ -1713,9 +1749,9 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
         {tp.views.map((view,vi) => {
           if (!view.imageDataUrl || view.enabled === false) return null;
           return (
-            <div key={view.id} style={{ flex:1,display:"flex",gap:10*s,minHeight:0 }}>
+            <div key={view.id} style={{ flex:1,display:"flex",flexDirection:"column",minHeight:0 }}>
               {/* Image annotée */}
-              <div style={{ flex:3,display:"flex",flexDirection:"column",minWidth:0 }}>
+              <div style={{ flex:1,display:"flex",flexDirection:"column",minWidth:0 }}>
                 {/* Label de vue */}
                 <div style={{ display:"flex",alignItems:"center",gap:6*s,marginBottom:4*s }}>
                   <span style={{ fontSize:11*s,fontWeight:700,color:pal.primary,textTransform:"uppercase",letterSpacing:1 }}>{view.label}</span>
@@ -1836,65 +1872,65 @@ const TechnicalPlanPreview = ({ data, appVersion, interactive, planTool, planSel
                 </div>
                 </div>{/* /flex:1 wrapper */}
               </div>
-
-              {/* Légende — organisée par zone */}
-              {(()=>{
-                const afs = tp.legendFontSize || 9;
-                return (
-                  <div style={{ flex:1,display:"flex",flexDirection:"column",gap:afs*0.6,minWidth:0,boxSizing:"border-box",borderLeft:`2px solid ${pal.primary}`,paddingLeft:afs,overflow:"hidden" }}>
-                    {(()=>{
-                      // Collecter les step indices présents dans cette vue (zones dessinées)
-                      const zoneIndices = [...new Set(view.stepZones.map(z=>z.stepIndex))].sort((a,b)=>a-b);
-                      // Machines placées dans cette vue, par stepId
-                      const machinesByStep = {};
-                      view.machineLabels.forEach(m => {
-                        const item = line.find(m2=>m2.id===m.lineId);
-                        const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
-                        const key = si >= 0 ? si : '__none__';
-                        if (!machinesByStep[key]) machinesByStep[key] = [];
-                        machinesByStep[key].push(m);
-                      });
-                      // Zones à afficher = union des zones dessinées + zones de machines placées
-                      const allZoneKeys = [...new Set([...zoneIndices, ...Object.keys(machinesByStep).filter(k=>k!=='__none__').map(Number)])].sort((a,b)=>a-b);
-                      if (allZoneKeys.length === 0 && !machinesByStep['__none__']) {
-                        return <div style={{ fontSize:afs,color:"#bbb",fontStyle:"italic",marginTop:afs*0.4 }}>Aucune annotation</div>;
-                      }
-                      return allZoneKeys.map(si => {
-                        const color = getZoneColor(pal, si, totalSteps);
-                        const step = steps[si];
-                        const machines = machinesByStep[si] || [];
-                        const circleSize = afs * 1.7;
-                        return (
-                          <div key={si}>
-                            {/* En-tête de zone */}
-                            <div style={{ display:"flex",alignItems:"center",gap:afs*0.45,marginBottom:afs*0.3 }}>
-                              <div style={{ width:circleSize,height:circleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
-                              <span style={{ fontSize:afs,fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:0.5,lineHeight:1.2 }}>{step?.title||"—"}</span>
-                            </div>
-                            {/* Machines de cette zone */}
-                            {machines.map(m => {
-                              const item = line.find(m2=>m2.id===m.lineId);
-                              const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
-                              const { letter } = getMachinePlanInfo(m.lineId);
-                              const mCircleSize = afs * 1.5;
-                              return (
-                                <div key={m.id} style={{ display:"flex",alignItems:"center",gap:afs*0.45,paddingLeft:afs*0.85,marginBottom:afs*0.2 }}>
-                                  <div style={{ width:mCircleSize,height:mCircleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs*0.9),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
-                                  <span style={{ fontSize:afs,color:"#444",lineHeight:1.2 }}>{icon?.name||"—"}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                );
-              })()}
             </div>
           );
         })}
-      </div>
+        </div>{/* /colonne vues */}
+
+        {/* Légende commune — union de toutes les vues */}
+        {(()=>{
+          const afs = tp.legendFontSize || 9;
+          const activeViews = tp.views.filter(v => v.enabled !== false);
+          // Collecter zones et machines de TOUTES les vues
+          const zoneIndicesSet = new Set();
+          activeViews.forEach(v => v.stepZones.forEach(z => zoneIndicesSet.add(z.stepIndex)));
+          const machinesByStep = {};
+          const seenMachines = new Set();
+          activeViews.forEach(v => v.machineLabels.forEach(m => {
+            if (seenMachines.has(m.lineId)) return;
+            seenMachines.add(m.lineId);
+            const item = line.find(m2=>m2.id===m.lineId);
+            const si = item?.stepId ? steps.findIndex(s => s.id === item.stepId) : -1;
+            const key = si >= 0 ? si : '__none__';
+            if (!machinesByStep[key]) machinesByStep[key] = [];
+            machinesByStep[key].push(m);
+          }));
+          const allZoneKeys = [...new Set([...zoneIndicesSet, ...Object.keys(machinesByStep).filter(k=>k!=='__none__').map(Number)])].sort((a,b)=>a-b);
+          return (
+            <div style={{ flex:1,display:"flex",flexDirection:"column",gap:afs*0.6,minWidth:0,boxSizing:"border-box",borderLeft:`2px solid ${pal.primary}`,paddingLeft:afs,overflow:"hidden" }}>
+              {allZoneKeys.length === 0 && !machinesByStep['__none__']
+                ? <div style={{ fontSize:afs,color:"#bbb",fontStyle:"italic",marginTop:afs*0.4 }}>Aucune annotation</div>
+                : allZoneKeys.map(si => {
+                  const color = getZoneColor(pal, si, totalSteps);
+                  const step = steps[si];
+                  const machines = machinesByStep[si] || [];
+                  const circleSize = afs * 1.7;
+                  return (
+                    <div key={si}>
+                      <div style={{ display:"flex",alignItems:"center",gap:afs*0.45,marginBottom:afs*0.3 }}>
+                        <div style={{ width:circleSize,height:circleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{si+1}</div>
+                        <span style={{ fontSize:afs,fontWeight:700,color:color,textTransform:"uppercase",letterSpacing:0.5,lineHeight:1.2 }}>{step?.title||"—"}</span>
+                      </div>
+                      {machines.map(m => {
+                        const item = line.find(m2=>m2.id===m.lineId);
+                        const icon = (icons||[]).find(ic=>ic.id===(item||{}).iconId);
+                        const { letter } = getMachinePlanInfo(m.lineId);
+                        const mCircleSize = afs * 1.5;
+                        return (
+                          <div key={m.id} style={{ display:"flex",alignItems:"center",gap:afs*0.45,paddingLeft:afs*0.85,marginBottom:afs*0.2 }}>
+                            <div style={{ width:mCircleSize,height:mCircleSize,borderRadius:"50%",background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:Math.max(6,afs*0.9),fontWeight:700,flexShrink:0,fontFamily:"monospace" }}>{letter}</div>
+                            <span style={{ fontSize:afs,color:"#444",lineHeight:1.2 }}>{icon?.name||"—"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })
+              }
+            </div>
+          );
+        })()}
+      </div>{/* /corps */}
 
       {/* Footer — même couleur que le header */}
       <div style={{ display:"flex",justifyContent:"space-between",padding:`${6*s}px ${24*s}px`,background:pal.primary,color:"rgba(255,255,255,0.6)",fontSize:9*s,flexShrink:0,flexWrap:"wrap",gap:8*s }}>
@@ -2127,12 +2163,12 @@ ${xhtml}
     // Rétrocompatibilité : ajouter technicalPlan si absent
     if (!parsed.technicalPlan) parsed.technicalPlan = { zoneLabel:"number", views:[
       { id:"top", label:"Vue de dessus", imageDataUrl:null, stepZones:[], machineLabels:[] },
-      { id:"side", label:"Vue de côté",  imageDataUrl:null, stepZones:[], machineLabels:[] },
+      { id:"side", label:"Vue de face",  imageDataUrl:null, stepZones:[], machineLabels:[] },
     ]};
     if (!parsed.technicalPlan.zoneLabel) parsed.technicalPlan.zoneLabel = "number";
     if (parsed.technicalPlan.gridSize === undefined) parsed.technicalPlan.gridSize = 5;
     if (parsed.technicalPlan.legendFontSize === undefined) parsed.technicalPlan.legendFontSize = 9;
-    parsed.technicalPlan.views.forEach(v => { if (v.enabled === undefined) v.enabled = true; });
+    parsed.technicalPlan.views.forEach(v => { if (v.enabled === undefined) v.enabled = true; if (v.id === 'side' && v.label === 'Vue de côté') v.label = 'Vue de face'; });
     if (parsed.pdfResolution !== undefined && parsed.pdfResolution <= 10) parsed.pdfResolution = 150;
     // Migration ligne : ajouter next:[] (format DAG)
     if (parsed.line?.length && parsed.line.every(m => m.next === undefined)) {
@@ -2330,7 +2366,20 @@ ${xhtml}
             {tab === "entree" && <BookendEditor data={data.entree} onChange={entree=>up(d=>{d.entree=entree;})} />}
             {tab === "steps" && <StepsEditor steps={data.steps} line={data.line||[]} icons={data.icons||[]} onChange={newSteps=>up(d=>{const deleted=new Set(d.steps.filter(s=>!newSteps.find(ns=>ns.id===s.id)).map(s=>s.id));d.steps=newSteps;if(deleted.size>0)(d.line||[]).forEach(m=>{if(deleted.has(m.stepId))m.stepId=null;});})} />}
             {tab === "sortie" && <BookendEditor data={data.sortie} onChange={sortie=>up(d=>{d.sortie=sortie;})} />}
-            {tab === "line" && <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps}
+            {tab === "line" && <>
+              <div style={{ display:'flex',flexDirection:'column',gap:8,padding:'8px 10px',background:'#f5f5f5',borderRadius:8,marginBottom:4 }}>
+                <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:'#555',minWidth:130 }}>Hauteur du bandeau</label>
+                  <input type="range" min={5} max={60} step={1} value={data.bgImageHeight||25} onChange={e=>up(d=>{d.bgImageHeight=parseInt(e.target.value);})} style={{ flex:1,accentColor:'#C8102E' }} />
+                  <span style={{ fontSize:11,fontWeight:700,color:'#C8102E',minWidth:32,textAlign:'right' }}>{data.bgImageHeight||25}%</span>
+                </div>
+                <div style={{ display:'flex',alignItems:'center',gap:10 }}>
+                  <label style={{ fontSize:11,fontWeight:600,color:'#555',minWidth:130 }}>Écart entre machines</label>
+                  <input type="range" min={14} max={60} step={1} value={data.lineEdgeGap||14} onChange={e=>up(d=>{d.lineEdgeGap=parseInt(e.target.value);})} style={{ flex:1,accentColor:'#C8102E' }} />
+                  <span style={{ fontSize:11,fontWeight:700,color:'#C8102E',minWidth:32,textAlign:'right' }}>{data.lineEdgeGap||14}</span>
+                </div>
+              </div>
+              <LineEditor icons={data.icons||[]} line={data.line||[]} steps={data.steps}
                 onChange={({icons,line})=>up(d=>{d.icons=icons;d.line=line;})}
                 onRemoveMachine={id=>up(d=>{
                   d.line=(d.line||[]).filter(m=>m.id!==id).map(m=>({...m,next:(m.next||[]).filter(nid=>nid!==id)}));
@@ -2343,7 +2392,7 @@ ${xhtml}
                   (d.technicalPlan?.views||[]).forEach(v=>{v.machineLabels=(v.machineLabels||[]).filter(ml=>!removedIds.includes(ml.lineId));});
                   (d.steps||[]).forEach(st=>(st.operations||[]).forEach(op=>{if(removedIds.includes(op.lineItemId))op.lineItemId=null;}));
                 })}
-                libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} />}
+                libSvgFiles={libSvgFiles} onLoadSvg={loadSvgFromLib} /></>}
             {tab === "plan" && <TechnicalPlanEditor data={data} up={up} planTool={planTool} setPlanTool={setPlanTool} planSelStep={planSelStep} setPlanSelStep={setPlanSelStep} planSelMachine={planSelMachine} setPlanSelMachine={setPlanSelMachine} planMachineMode={planMachineMode} setPlanMachineMode={setPlanMachineMode} />}
             {tab === "export" && (
               <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
