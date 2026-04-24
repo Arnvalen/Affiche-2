@@ -1,16 +1,24 @@
 /**
- * Application complète de l'éditeur d'affiches Nexans.
- *
- * Ce fichier unique contient tous les composants :
- * - Constantes (types de tags, formats papier, couleurs)
- * - Composants de rendu (QR codes, tags, panneaux, poster)
- * - Composants d'édition (tags, entrée/sortie, étapes)
- * - Primitives UI (boutons, inputs, cartes dépliables)
- * - Fonctions d'export (JSON, SVG, PDF)
- * - Composant principal App (state, sidebar, layout)
- *
- * Tous les styles sont inline (objets React) pour simplifier les exports
- * SVG/PDF qui capturent le DOM directement.
+ * ╔══════════════════════════════════════════════════════════════════════╗
+ * ║          NEXANS — Éditeur d'affiche de ligne de production          ║
+ * ║                           v1.1.2                                    ║
+ * ╠══════════════════════════════════════════════════════════════════════╣
+ * ║  Auteur   Arnaud Valente Jacot-Descombes                            ║
+ * ║           Stagiaire EPFL                                            ║
+ * ║           Quality Management — NEXANS Suisse SA                     ║
+ * ║           arnaud_jacot@hotmail.com · arnvalen.ch                    ║
+ * ╠══════════════════════════════════════════════════════════════════════╣
+ * ║  Ce fichier unique contient tous les composants :                   ║
+ * ║  · Constantes (types de tags, formats papier, palettes couleur)     ║
+ * ║  · Composants de rendu (QR codes, tags, panneaux, poster)           ║
+ * ║  · Composants d'édition (tags, entrée/sortie, étapes, ligne, plan)  ║
+ * ║  · Primitives UI (boutons, inputs, cartes dépliables)               ║
+ * ║  · Fonctions d'export (JSON, SVG, PDF)                              ║
+ * ║  · Composant principal App (state, sidebar, layout)                 ║
+ * ║                                                                     ║
+ * ║  Tous les styles sont inline (objets React) pour simplifier les     ║
+ * ║  exports SVG/PDF qui capturent le DOM directement.                  ║
+ * ╚══════════════════════════════════════════════════════════════════════╝
  */
 import { useState, useRef, useCallback, useEffect, useMemo, Fragment, Component } from "react";
 import { produce } from "immer";        // Copie structurale pour up() — remplace JSON.parse/stringify

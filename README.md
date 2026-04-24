@@ -1,4 +1,14 @@
-# Nexans — Éditeur d'affiche ligne de production
+<!--
+version: 1.1.2
+date: 2026-04-24
+modifications:
+  - Ajout version dans le titre
+  - Table des onglets : ajout Plan, mention palette couleur, sliders ligne, DAG
+  - Ajout sections "Plan technique" et "Documentation" dans Utilisation
+  - Ajout script dist:win et section "Distribution Windows (Electron)"
+-->
+
+# Nexans — Éditeur d'affiche ligne de production `v1.1.2`
 
 Outil interne pour créer, éditer et exporter des affiches de lignes de production.
 Interface React avec aperçu temps réel, QR codes intégrés, ligne de production visuelle, et export JSON / SVG / PNG / PDF.
@@ -42,6 +52,19 @@ L'application s'ouvre automatiquement sur `https://localhost:3000`.
 | `npm run build` | Build production dans `dist/` |
 | `npm run preview` | Servir le build localement |
 | `npm run setup:https` | Générer les certificats HTTPS (accès réseau sans warning) |
+| `npm run dist:win` | Packager l'application Electron Windows → `dist-electron/NexansAffiche-win-x64.zip` |
+
+### Distribution Windows (Electron)
+
+`npm run dist:win` produit une archive `dist-electron/NexansAffiche-win-x64.zip` contenant :
+- `Nexans Affiche-win32-x64/` — l'application Electron packagée
+- `Lancer Nexans Affiche.bat` — lanceur à double-cliquer
+
+Le `.bat` détecte automatiquement si une mise à jour est nécessaire (comparaison de version),
+copie les fichiers dans `%LOCALAPPDATA%\NexansAffiche\`, puis lance l'application.
+Le dossier `library/` adjacent au `.bat` est partagé avec l'application comme bibliothèque d'icônes et de configs.
+
+> **À chaque nouvelle version** : incrémenter `version` dans `package.json` et `electron/launcher.bat` avant de lancer `npm run dist:win`.
 
 ---
 
@@ -74,11 +97,12 @@ nexans-poster-editor/
 | Onglet | Contenu |
 |--------|---------|
 | **En-tête** | Référence, process, sous-titre, logo, image bandeau |
-| **Format** | Format papier (A0–A4, personnalisé), colonnes, taille police (1–20), QR, forçage |
+| **Format** | Format papier (A0–A4, personnalisé), colonnes, palette couleur (8 thèmes), taille police (1–20), QR, forçage |
 | **Entrée** | Catégories et éléments d'entrée avec tags/QR |
 | **Process** | Étapes, opérations, points de contrôle, associations machines |
 | **Sortie** | Catégories et éléments de sortie avec tags/QR |
-| **Ligne** | Constructeur de ligne de production (icônes SVG, zones, associations) |
+| **Ligne** | Constructeur de ligne de production (icônes SVG, connexions DAG, sliders hauteur/écart) |
+| **Plan** | Plans techniques d'implantation annotés (Vue de dessus + Vue de face, légende partagée) |
 | **Export** | JSON, SVG, PNG, PDF, import, réinitialisation |
 | **Biblio** | Bibliothèque avec versionnage (JSON configs + icônes SVG) |
 
@@ -105,11 +129,20 @@ Pour associer un QR code à un tag, cliquer dessus et saisir l'URL.
 L'onglet **Ligne** permet de composer visuellement la ligne de production :
 1. Importer des icônes SVG (upload ou depuis la bibliothèque)
 2. Ajouter des machines dans la zone de composition
-3. Associer chaque machine à une étape du process
-4. Les machines se regroupent en zones colorées (une par étape)
-5. La ligne s'affiche en bandeau sur le poster
+3. Définir les connexions entre machines (machine suivante → layout DAG automatique)
+4. Associer chaque machine à une étape du process (zone colorée)
+5. Régler la hauteur du bandeau et l'écart entre machines via les sliders en haut de l'onglet
+6. La ligne s'affiche en bandeau sur le poster, avec des largeurs de colonnes proportionnelles aux icônes
 
-Chaque opération du process peut être liée à une machine — elle affiche alors la lettre de cette machine.
+Chaque opération du process peut être liée à une machine — elle affiche alors la lettre de cette machine (A, B, A1, A2…).
+
+### Plan technique
+
+L'onglet **Plan** permet d'annoter des plans d'implantation importés (images) :
+1. Importer une image pour la Vue de dessus et/ou la Vue de face
+2. Dessiner des zones colorées liées aux étapes du process
+3. Placer des labels de machines (lettres) avec flèches optionnelles
+4. La légende est partagée entre les deux vues
 
 ### Exports
 
@@ -195,6 +228,32 @@ Les deux doivent être dans le même dossier. Double-clic sur `installer-ca.bat`
 
 ---
 
+## Documentation technique
+
+Des documents détaillés sont disponibles dans le dossier [`docs/`](docs/) :
+
+| Fichier | Contenu |
+|---------|---------|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Structure technique, composants, data model, exports, décisions |
+| [DOCUMENTATION.md](docs/DOCUMENTATION.md) | Guide complet de toutes les fonctionnalités |
+| [CLAUDE.md](docs/CLAUDE.md) | Contexte condensé pour assistants IA (conventions, pièges, data model) |
+| [ligne-de-production.md](docs/ligne-de-production.md) | Modèle de données de la ligne (DAG, layout, rendu) |
+| [guide-editeur-ligne.md](docs/guide-editeur-ligne.md) | Guide utilisateur de l'éditeur de ligne |
+| [GENERER-JSON.md](docs/GENERER-JSON.md) | Guide pour générer un JSON d'affiche par IA ou script |
+| [INSTALL.md](docs/INSTALL.md) | Installation rapide (résumé) |
+| [Strategie.md](docs/Strategie.md) | Stratégie de présentation de l'outil |
+
+---
+
 ## Licence
 
 Usage interne Nexans.
+
+---
+
+## Auteur
+
+**Arnaud Valente Jacot-Descombes**  
+Stagiaire EPFL  
+Quality Management — NEXANS Suisse SA  
+✉ arnaud_jacot@hotmail.com · 🌐 [arnvalen.ch](https://arnvalen.ch)
